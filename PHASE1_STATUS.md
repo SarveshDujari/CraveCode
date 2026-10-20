@@ -20,7 +20,7 @@ This is an evidence log, not a claim that the whole milestone's external integra
 
 - **Swiggy end-to-end:** no Swiggy account was authorized in this session. `get_addresses`, `search_menu`, `update_food_cart`, and `get_food_cart` have not been exercised against an authenticated account. Their local code paths exist, but the central cart read-back exit gate is **not passed**. The account holder must complete Swiggy's phone/OTP browser flow; then the smoke test can run on an empty cart with an available uncustomized item. We must inspect the live cart-tool schema before trusting the write payload.
 - **MongoDB Atlas:** no URI was provided, so indexes and persistence were not exercised against Atlas. The initializer is present and runs only when configured.
-- **Render:** `render.yaml` is ready for a Singapore-region free web service. The server now uses Render's supplied external URL and disables the localhost-only Swiggy OAuth path there. A Render account exists, but there is no Git remote or deployed service yet; deployment is not verified.
+- **Render:** `render.yaml` is ready for a Singapore-region free web service. The server uses Render's supplied external URL and disables the localhost-only Swiggy OAuth path there. The private repository is pushed to `https://github.com/SarveshDujari/CraveCode.git`; Render Blueprint creation and hosted verification remain open.
 - **Entire:** the CLI is configured and the first commit exists, but Codex reports the repository hooks need trust review. No captured session is claimed yet.
 - **Public Swiggy access:** the OAuth flow is localhost-only and in-memory in this phase. Public redirect allowlisting and durable per-user token storage are later release gates.
 
