@@ -49,6 +49,8 @@ Swiggy OAuth is deliberately limited to localhost in Phase 1. Sessions and token
 
 The Atlas initializer creates indexes for `meal_jobs`, `candidates`, `nutrition_claims`, `cart_audits`, and `preferences`. The Phase 1 UI does not persist personal briefs yet. Server credentials never enter the browser bundle. The `render.yaml` provides a Singapore-region free web-service blueprint. Once the repository is hosted and linked to Render, it can deploy without Atlas; add `MONGODB_URI` as a Render secret when the Atlas cluster exists. Render supplies its own public origin. Swiggy OAuth remains disabled on Render in Phase 1. No hosted service is claimed until it is actually deployed and tested.
 
+To deploy after pushing this repository to GitHub: in the Render dashboard choose **New → Blueprint**, select the repository, and review the single `mealpilot` free web service from `render.yaml`. Approve the Blueprint and wait for its deploy to finish. Then open the assigned `onrender.com` URL and check `/api/health`. If Render asks to access a private repository, authorize that repository in your GitHub account. The free service can sleep when idle, so allow time for its first request to wake it.
+
 ## What is real now
 
 - Responsive landing page and meal form with accessible single-select diet/goal controls, numeric units, and validation.

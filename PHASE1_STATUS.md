@@ -11,6 +11,7 @@ This is an evidence log, not a claim that the whole milestone's external integra
 | Contract tests | `npm test`: 3 passed. |
 | Running app | Production build served `GET /` (HTTP 200), `GET /api/health` (`ok: true`), and a valid `POST /api/briefs/validate`. |
 | Browser UI | Hero, meal form, result-preview labels, and form submission were inspected in the local browser. A local-origin validation bug found during the first submit was fixed and retested. |
+| Render-mode safety | With `RENDER=true` and a simulated `RENDER_EXTERNAL_URL`, `/api/system` reported `swiggyLocalEnabled: false`; `/api/swiggy/connect` returned HTTP 503. |
 | Swiggy OAuth start | `GET /api/swiggy/connect` returned HTTP 302 to `mcp.swiggy.com`. No account authorization was completed. |
 | Gemma reachability | Local Ollama has `gemma3:4b`; three synthetic constraint-extraction probes passed after adding an explicit JSON output schema. Each completed in roughly 5–6 seconds in the successful run. |
 | Entire | Official CLI 0.11.5 installed under ignored `.tools/bin`; `entire enable` configured this repository and Codex hooks. The initial Git commit exists. Status reports `trust_review_needed`, so session capture is not yet demonstrated. |
