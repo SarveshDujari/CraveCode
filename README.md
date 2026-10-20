@@ -40,14 +40,14 @@ Swiggy OAuth is deliberately limited to localhost in Phase 1. Sessions and token
 | Variable | Use |
 | --- | --- |
 | `PORT` | API and production-build port; default `8787`. |
-| `PUBLIC_ORIGIN` | Browser origin and OAuth callback origin; default `http://localhost:5173`. |
+| `PUBLIC_ORIGIN` | Optional browser origin override. Defaults to Render's `RENDER_EXTERNAL_URL` on Render, or `http://localhost:5173` locally. |
 | `MONGODB_URI` | Optional Atlas connection. If absent, `/api/system` reports `not-configured`. |
 | `MONGODB_DB` | Database name; default `mealpilot`. |
 | `GEMMA_API_URL` | Ollama-compatible `/api/generate` URL for the probe. |
 | `GEMMA_MODEL` | Model to probe, default `gemma3:4b`. |
 | `GEMMA_API_KEY` | Optional bearer token for a hosted compatible endpoint. |
 
-The Atlas initializer creates indexes for `meal_jobs`, `candidates`, `nutrition_claims`, `cart_audits`, and `preferences`. The Phase 1 UI does not persist personal briefs yet. Server credentials never enter the browser bundle. The `render.yaml` provides a deployment blueprint; no hosted service is claimed until it is actually deployed and tested.
+The Atlas initializer creates indexes for `meal_jobs`, `candidates`, `nutrition_claims`, `cart_audits`, and `preferences`. The Phase 1 UI does not persist personal briefs yet. Server credentials never enter the browser bundle. The `render.yaml` provides a Singapore-region free web-service blueprint. Once the repository is hosted and linked to Render, it can deploy without Atlas; add `MONGODB_URI` as a Render secret when the Atlas cluster exists. Render supplies its own public origin. Swiggy OAuth remains disabled on Render in Phase 1. No hosted service is claimed until it is actually deployed and tested.
 
 ## What is real now
 

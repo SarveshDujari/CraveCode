@@ -19,8 +19,8 @@ import {
 } from "./swiggy.ts";
 
 const port = Number(process.env.PORT || 8787);
-const publicOrigin = new URL(process.env.PUBLIC_ORIGIN || "http://localhost:5173");
-const swiggyLocalEnabled = ["localhost", "127.0.0.1"].includes(publicOrigin.hostname);
+const publicOrigin = new URL(process.env.PUBLIC_ORIGIN || process.env.RENDER_EXTERNAL_URL || "http://localhost:5173");
+const swiggyLocalEnabled = process.env.RENDER !== "true" && ["localhost", "127.0.0.1"].includes(publicOrigin.hostname);
 const distRoot = resolve(process.cwd(), "dist");
 
 function requestOrigin(request: IncomingMessage): URL {
