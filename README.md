@@ -1,0 +1,61 @@
+# MealPilot
+
+MealPilot is a meal-discovery agent in progress. Give it a budget, diet, protein and calorie targets, and optional food preferences; it will search orderable meals, explain evidence and tradeoffs, and prepare a selected Swiggy cart for review. It never places an order automatically.
+
+The project is being built in [four phases](./FOUR_PHASE_ROADMAP.md). The [architecture](./ARCHITECTURE.md) and [frontend design](./FRONTEND_DESIGN.md) set the constraints for later work. **This repository currently contains the Phase 1 shell and integration probes, not the finished recommendation agent.** Example result cards are explicitly marked as design previews.
+
+![Phase 1 MealPilot homepage](./docs/phase1-hero.png)
+
+## Run locally
+
+Requirements: Node.js 24+, npm, and optionally a local Ollama service with `gemma3:4b` pulled.
+
+```powershell
+npm ci
+Copy-Item .env.example .env
+npm run build
+npm start
+```
+
+Open `http://localhost:8787`. For live frontend changes, run `npm run dev:api` and `npm run dev` in separate terminals, then open `http://localhost:5173`. In that mode set `PUBLIC_ORIGIN=http://localhost:5173` in `.env` for the OAuth callback.
+
+```powershell
+npm run check
+npm test
+npm run gemma:probe
+```
+
+The Gemma probe uses the Ollama generate API by default. Set `GEMMA_API_URL` and `GEMMA_MODEL` to another compatible endpoint/model if needed. Its three examples are synthetic checks, not a complete evaluation.
+
+## Phase 1 Swiggy check
+
+The local page has a **Check the real menu** area. Connecting Swiggy starts its documented OAuth 2.1/PKCE browser flow, which requires the account holder's phone/OTP. After connection, choose a saved address and search a dish. The API returns only a small menu summary: name, restaurant, menu price, stock, and IDs. It does not claim the item meets macro or final-budget goals.
+
+For a plain item without required customizations, **Test cart** asks for explicit confirmation, refuses to overwrite a nonempty cart, calls `update_food_cart`, then immediately reads `get_food_cart`. It only reports success when the selected item and payable total are present in the read-back. No checkout or order tool is exposed. The local SDK can expose the current `update_food_cart` input schema at `/api/swiggy/cart-tool-schema` for debugging because Swiggy's recipe and reference examples use different cart payload shapes.
+
+Swiggy OAuth is deliberately limited to localhost in Phase 1. Sessions and tokens are held in server memory and vanish on restart. Before a public multiuser release, move these into per-user encrypted storage, add proper session management, and complete Swiggy's production-access review. See the [Swiggy developer quickstart](https://mcp.swiggy.com/builders/docs/start/developer/) and [authentication guide](https://mcp.swiggy.com/builders/docs/start/authenticate/).
+
+## Configuration
+
+| Variable | Use |
+| --- | --- |
+| `PORT` | API and production-build port; default `8787`. |
+| `PUBLIC_ORIGIN` | Browser origin and OAuth callback origin; default `http://localhost:5173`. |
+| `MONGODB_URI` | Optional Atlas connection. If absent, `/api/system` reports `not-configured`. |
+| `MONGODB_DB` | Database name; default `mealpilot`. |
+| `GEMMA_API_URL` | Ollama-compatible `/api/generate` URL for the probe. |
+| `GEMMA_MODEL` | Model to probe, default `gemma3:4b`. |
+| `GEMMA_API_KEY` | Optional bearer token for a hosted compatible endpoint. |
+
+The Atlas initializer creates indexes for `meal_jobs`, `candidates`, `nutrition_claims`, `cart_audits`, and `preferences`. The Phase 1 UI does not persist personal briefs yet. Server credentials never enter the browser bundle. The `render.yaml` provides a deployment blueprint; no hosted service is claimed until it is actually deployed and tested.
+
+## What is real now
+
+- Responsive landing page and meal form with accessible single-select diet/goal controls, numeric units, and validation.
+- Original generated hero photograph stored in `public/hero-food.png`.
+- Typed meal, candidate, evidence, and cart-audit contracts.
+- Node API serving the built frontend, validating briefs, and providing local Swiggy OAuth/menu/cart integration paths.
+- Optional Atlas connection and indexes, plus a local Gemma structured-output probe.
+- Clearly labeled preview cards; no invented nutrition values or all-in price claims.
+
+See [PHASE1_STATUS.md](./PHASE1_STATUS.md) for the checks completed in this workspace and the external gates still open.
