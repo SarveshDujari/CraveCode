@@ -61,7 +61,7 @@ Swiggy OAuth is deliberately limited to localhost. Sessions and tokens are held 
 
 The Atlas initializer creates indexes for `meal_jobs`, `candidates`, `nutrition_claims`, `cart_audits`, and `preferences`. Search jobs and candidates are persisted when Atlas is configured. Server credentials never enter the browser bundle. The `render.yaml` provides a Singapore-region free web-service blueprint. Add `SERPAPI_API_KEY` and `MONGODB_URI` as Render environment secrets. Allow the service's outbound IP ranges in Atlas Network Access. Render supplies its own public origin. Swiggy OAuth remains disabled on Render until public access and per-user session storage are ready.
 
-Each public click uses up to three SerpApi searches and the service has a 30-search-per-hour guard; check your SerpApi plan's quota before sharing the link widely. This path is for discovery leads, not verified menu prices. Do not commit the API key or Atlas URI.
+Each public click uses up to three SerpApi searches and the service has a 30-request-per-hour guard; check your SerpApi plan's quota before sharing the link widely. This path is for discovery leads, not verified menu prices. Do not commit the API key or Atlas URI.
 
 The live preview is [cravecode.onrender.com](https://cravecode.onrender.com/). The free service can sleep when idle, so allow time for its first request to wake it. Public web search will not return leads until `SERPAPI_API_KEY` is set in Render.
 
