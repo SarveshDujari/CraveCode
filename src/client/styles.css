@@ -137,6 +137,7 @@ h1,h2,h3,p{margin-top:0}
 .menu-card-top span:last-child{color:#7c7975;text-align:right}
 .menu-card h3{font-family:Outfit,"DM Sans",sans-serif;font-size:27px;line-height:1.1;letter-spacing:-.055em;margin:17px 0 5px}
 .restaurant-name{color:#77716d;font-size:12px;margin:0}
+.search-theme{color:#9b705c;font-size:11px;margin:6px 0 0}
 .restaurant-review{font-size:11px;line-height:1.5;color:#77716d;margin:8px 0 0}
 .restaurant-review.review-well-reviewed{color:#267755}
 .restaurant-review.review-low-rating{color:#ad573d}

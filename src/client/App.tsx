@@ -133,6 +133,7 @@ function MenuCard({ item, jobId, nutritionAvailable }: { item: MealResult; jobId
       <div className="menu-card-top"><span>{item.diet === "unknown" ? "DIET UNCONFIRMED" : item.diet.toUpperCase()}</span><span>{item.availability === "available" ? "AVAILABLE" : "STOCK UNCONFIRMED"}</span></div>
       <h3>{item.title}</h3>
       <p className="restaurant-name">{item.source === "web-lead" ? "Source: " : ""}{item.restaurant}</p>
+      {item.searchTheme && <p className="search-theme">Found while searching for {item.searchTheme}</p>}
       <p className={`restaurant-review review-${item.restaurantReview?.status || "unknown"}`}>
         {item.restaurantReview?.rating !== null && item.restaurantReview?.rating !== undefined
           ? `★ ${item.restaurantReview.rating.toFixed(1)} · ${item.restaurantReview.ratingsText || "review count unknown"}`

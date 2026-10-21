@@ -189,7 +189,7 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
         result.warnings.push("Search results could not be saved for later review.");
       }
     }
-    recentSearches.set(result.jobId, { seenAt: Date.now(), titles: new Map(result.results.map(item => [item.id, item.title])) });
+    recentSearches.set(result.jobId, { seenAt: Date.now(), titles: new Map(result.results.map(item => [item.id, item.searchTheme || item.title])) });
     for (const [id, search] of recentSearches) if (Date.now() - search.seenAt > 30 * 60_000) recentSearches.delete(id);
     json(response, 200, result);
     return;

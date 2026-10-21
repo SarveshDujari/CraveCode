@@ -96,7 +96,7 @@ function rankLive(item: PreviewMenuItem, brief: MealBrief, queries: string[], si
     imageUrl: item.imageUrl, menuPriceInr: item.priceInr,
     diet: item.isVeg === true ? "vegetarian" : item.isVeg === false ? "non-vegetarian" : "unknown",
     availability: item.inStock === true ? "available" : "unknown",
-    source: "swiggy-live", sourceUrl: null,
+    source: "swiggy-live", sourceUrl: null, searchTheme: null,
     restaurantReview: signal ? { rating: signal.rating, ratingsText: signal.ratingsText, status: review, source: "swiggy" } : null,
     nutritionSources: [], match: "unverified", reasons, cautions, score
   };
@@ -183,6 +183,8 @@ export async function searchWithWeb(brief: MealBrief, searchWeb: WebSearch, plan
       const domain = trustedDeliveryHost(lead.url);
       if (!domain) continue;
       if (!cityFitsPage(lead.url, city)) continue;
+      const pathname = new URL(lead.url).pathname;
+      if (domain === "zomato.com" && /\/restaurants\/|\/delivery\/|\/delivery-in-|\/order\/verify|\/dish-/i.test(pathname)) continue;
       const dishQuery = brief.cuisine && queries[index].toLowerCase().startsWith(brief.cuisine.toLowerCase())
         ? queries[index].slice(brief.cuisine.length).trim() : queries[index];
       const queryWords = tokens(dishQuery);
@@ -194,13 +196,14 @@ export async function searchWithWeb(brief: MealBrief, searchWeb: WebSearch, plan
       const title = lead.title.trim();
       if (!title || /recipe|homemade|how to make/i.test(`${title} ${lead.snippet}`)) continue;
       if (/^(because you searched|how can i order|best .* delivery restaurants)/i.test(title)) continue;
-      if (/-dish-restaurants\/?$/i.test(new URL(lead.url).pathname)) continue;
+      if (/-dish-restaurants\/?$/i.test(pathname)) continue;
+      if (/\brestaurants?\b.*\b(delivery|in)\b|\bdelivery restaurants?\b/i.test(title)) continue;
       if (brief.diet !== "any" && /\b(chicken|mutton|meat|fish|prawn|beef|pork)\b/i.test(`${title} ${lead.snippet}`)) continue;
       if (brief.diet === "vegetarian" && /\begg\b/i.test(`${title} ${lead.snippet}`)) continue;
       if (exclusions(brief.wish).some(term => `${title} ${lead.snippet}`.toLowerCase().includes(term))) continue;
       results.push({
         id: lead.url, title, restaurant: domain, imageUrl: lead.imageUrl,
-        menuPriceInr: null, diet: "unknown", availability: "unknown", source: "web-lead", sourceUrl: lead.url, restaurantReview: null,
+        menuPriceInr: null, diet: "unknown", availability: "unknown", source: "web-lead", sourceUrl: lead.url, searchTheme: dishQuery, restaurantReview: null,
         nutritionSources: [], match: "unverified", reasons: ["Found on the public web for your city and search theme"],
         cautions: ["This is a search lead, not a verified live menu item", "Price, availability, diet, protein, calories, and delivery fees are unverified"],
         score: matchCount * 5 + (domain === "swiggy.com" ? 2 : 0)

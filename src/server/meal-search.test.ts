@@ -53,12 +53,14 @@ test("public results are labeled as leads with no fabricated price or availabili
   assert.equal(result.results[0].menuPriceInr, null);
   assert.equal(result.results[0].availability, "unknown");
   assert.equal(result.results[0].sourceUrl, "https://www.swiggy.com/city/bangalore/paneer-bowls");
+  assert.equal(result.results[0].searchTheme, "paneer tikka");
 });
 
 test("public restaurant pages can match a dish named in the snippet without admitting generic category pages", async () => {
   const result = await searchWithWeb({ ...brief, city: "Bengaluru", dish: "paneer tikka" }, async () => [
     { title: "Order from Sukh Sagar", url: "https://www.swiggy.com/city/bangalore/sukh-sagar-rest30458", snippet: "Paneer tikka on the menu", imageUrl: null },
-    { title: "Best Paneer Tikka Delivery Restaurants", url: "https://www.swiggy.com/city/bangalore/paneer-tikka-dish-restaurants", snippet: "50 dishes", imageUrl: null }
+    { title: "Best Paneer Tikka Delivery Restaurants", url: "https://www.swiggy.com/city/bangalore/paneer-tikka-dish-restaurants", snippet: "50 dishes", imageUrl: null },
+    { title: "Paneer Tikka Delivery in Bangalore", url: "https://www.zomato.com/bangalore/delivery/dish-paneer-tikka", snippet: "Explore dishes", imageUrl: null }
   ]);
   assert.deepEqual(result.results.map(value => value.title), ["Order from Sukh Sagar"]);
 });

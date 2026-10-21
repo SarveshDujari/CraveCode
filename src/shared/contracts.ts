@@ -104,6 +104,7 @@ export const mealResultSchema = z.object({
   diet: z.enum(["vegetarian", "non-vegetarian", "unknown"]),
   availability: z.enum(["available", "unknown"]),
   source: z.enum(["swiggy-live", "web-lead"]), sourceUrl: z.url().nullable(),
+  searchTheme: z.string().nullable(),
   restaurantReview: restaurantReviewSchema.nullable(),
   nutritionSources: z.array(z.object({ title: z.string(), url: z.url() })),
   match: z.enum(["closest", "unverified"]), reasons: z.array(z.string()), cautions: z.array(z.string()), score: z.number()
