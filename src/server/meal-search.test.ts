@@ -13,6 +13,7 @@ const item = (name: string, id: string, overrides: Partial<PreviewMenuItem> = {}
 test("an empty dish produces bounded goal-aware searches", () => {
   assert.deepEqual(planQueries(brief), ["paneer tikka", "dal bowl", "tofu bowl", "chole"]);
   assert.equal(planQueries({ ...brief, dish: "dosa" })[0], "dosa");
+  assert.deepEqual(planQueries({ ...brief, maxCaloriesKcal: 400 }), ["grilled paneer", "tofu salad", "sprouts chaat", "dal soup"]);
 });
 
 test("live search deduplicates, excludes unavailable/nonveg, and never claims an exact macro match", async () => {
@@ -72,8 +73,37 @@ test("public discovery drops unrelated menu pages and caps output", async () => 
     { title: "Paneer in Mumbai", url: "https://www.swiggy.com/city/mumbai/paneer-restaurants", snippet: "Order online", imageUrl: null },
     ...Array.from({ length: 20 }, (_, index) => ({ title: `Paneer restaurant ${index}`, url: `https://www.swiggy.com/paneer-${index}`, snippet: "Order online", imageUrl: null }))
   ]);
-  assert.equal(result.results.length, 12);
+  assert.equal(result.results.length, 15);
   assert.ok(result.results.every(item => item.sourceUrl?.includes("swiggy.com")));
   assert.ok(result.results.every(item => item.title.includes("Paneer")));
   assert.ok(result.results.every(item => !item.sourceUrl?.includes("/city/mumbai/")));
+});
+
+test("live shortlist favors well-reviewed restaurants without treating ratings as safety proof", async () => {
+  const result = await searchWithSwiggy(
+    brief,
+    async () => [
+      item("Paneer Bowl", "low", { restaurantId: "low" }),
+      item("Paneer Bowl", "high", { restaurantId: "high" }),
+      item("Paneer Bowl", "closed", { restaurantId: "closed" })
+    ],
+    ["paneer"],
+    async () => [
+      { id: "low", rating: 3.2, ratingsText: "5 ratings", availabilityStatus: "OPEN" },
+      { id: "high", rating: 4.5, ratingsText: "1K+ ratings", availabilityStatus: "OPEN" },
+      { id: "closed", rating: 4.9, ratingsText: "2K+ ratings", availabilityStatus: "CLOSED" }
+    ]
+  );
+  assert.deepEqual(result.results.map(value => value.id), ["high:high", "low:low"]);
+  assert.equal(result.results[0].restaurantReview?.status, "well-reviewed");
+  assert.equal(result.results[1].restaurantReview?.status, "low-rating");
+  assert.match(result.results[1].cautions.join(" "), /recent reviews/);
+});
+
+test("live shortlist shows up to 15 items across restaurants", async () => {
+  const result = await searchWithSwiggy(brief, async () => Array.from({ length: 20 }, (_, index) =>
+    item(`Paneer Bowl ${index}`, String(index), { restaurantId: `restaurant-${index % 5}` })
+  ), ["paneer"]);
+  assert.equal(result.results.length, 15);
+  assert.equal(new Set(result.results.map(value => value.id.split(":")[0])).size, 5);
 });

@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
-import type { MealBrief, MealResult, MealSearchResponse, PreviewMenuItem } from "../shared/contracts.ts";
+import type { MealBrief, MealResult, MealSearchResponse, PreviewMenuItem, RestaurantSignal } from "../shared/contracts.ts";
 
 type SearchMenu = (query: string, vegOnly: boolean) => Promise<PreviewMenuItem[]>;
+type SearchRestaurants = (query: string) => Promise<RestaurantSignal[]>;
 type WebSearch = (query: string) => Promise<Array<{ title: string; url: string; snippet: string; imageUrl: string | null }>>;
 
 const mealTerms: Record<MealBrief["goal"], Record<MealBrief["diet"], string[]>> = {
@@ -22,10 +23,17 @@ const mealTerms: Record<MealBrief["goal"], Record<MealBrief["diet"], string[]>> 
   }
 };
 
+const lowerCalorieSearchThemes: Record<MealBrief["diet"], string[]> = {
+  vegetarian: ["grilled paneer", "tofu salad", "sprouts chaat", "dal soup"],
+  "egg-friendly": ["egg salad", "grilled paneer", "sprouts chaat", "dal soup"],
+  any: ["grilled chicken", "egg salad", "tofu salad", "dal soup"]
+};
+
 export function planQueries(brief: MealBrief): string[] {
   const explicit = brief.dish.trim();
   const cuisine = brief.cuisine.trim();
-  const terms = explicit ? [explicit, ...mealTerms[brief.goal][brief.diet]] : mealTerms[brief.goal][brief.diet];
+  const themes = brief.maxCaloriesKcal < 500 ? lowerCalorieSearchThemes[brief.diet] : mealTerms[brief.goal][brief.diet];
+  const terms = explicit ? [explicit, ...themes] : themes;
   return [...new Set(terms.map(term => cuisine && !term.toLowerCase().includes(cuisine.toLowerCase()) ? `${cuisine} ${term}` : term))].slice(0, 4);
 }
 
@@ -39,8 +47,26 @@ function exclusions(value: string): string[] {
     .filter(Boolean);
 }
 
-function rankLive(item: PreviewMenuItem, brief: MealBrief, queries: string[]): MealResult | null {
+function ratingsLowerBound(value: string | null): number | null {
+  if (!value) return null;
+  const match = value.replace(/,/g, "").trim().match(/^(\d+(?:\.\d+)?)\s*([kKmM])?/);
+  if (!match) return null;
+  const number = Number(match[1]);
+  const multiplier = match[2]?.toLowerCase() === "k" ? 1000 : match[2]?.toLowerCase() === "m" ? 1_000_000 : 1;
+  return Number.isFinite(number) ? Math.floor(number * multiplier) : null;
+}
+
+function reviewStatus(signal: RestaurantSignal | undefined): "well-reviewed" | "limited-feedback" | "mixed-rating" | "low-rating" | "unknown" {
+  if (!signal || signal.rating === null) return "unknown";
+  const count = ratingsLowerBound(signal.ratingsText);
+  if (signal.rating < 3.7) return "low-rating";
+  if (count === null || count < 100) return "limited-feedback";
+  return signal.rating >= 4 ? "well-reviewed" : "mixed-rating";
+}
+
+function rankLive(item: PreviewMenuItem, brief: MealBrief, queries: string[], signal?: RestaurantSignal): MealResult | null {
   if (item.inStock === false) return null;
+  if (signal?.availabilityStatus === "CLOSED" || signal?.availabilityStatus === "UNAVAILABLE") return null;
   if (brief.diet === "vegetarian" && item.isVeg !== true) return null;
   if (brief.diet === "egg-friendly" && item.isVeg === false && !/\begg\b/i.test(item.name)) return null;
   if (exclusions(brief.wish).some(term => item.name.toLowerCase().includes(term))) return null;
@@ -51,7 +77,9 @@ function rankLive(item: PreviewMenuItem, brief: MealBrief, queries: string[]): M
   const matchedWish = wishWords.filter(word => itemWords.has(word)).length;
   const queryMatch = Math.max(...queries.map(query => tokens(query).filter(word => itemWords.has(word)).length), 0);
   const underMenuBudget = item.priceInr !== null && item.priceInr <= brief.budgetInr;
-  const score = queryMatch * 5 + matchedDish * 8 + matchedWish * 2 + (underMenuBudget ? 4 : 0) + (item.inStock === true ? 2 : 0) + (item.isVeg === true && brief.diet === "vegetarian" ? 2 : 0);
+  const review = reviewStatus(signal);
+  const reviewBoost = brief.preferWellReviewed ? review === "well-reviewed" ? 6 : review === "low-rating" ? -6 : 0 : 0;
+  const score = queryMatch * 5 + matchedDish * 8 + matchedWish * 2 + (underMenuBudget ? 4 : 0) + (item.inStock === true ? 2 : 0) + (item.isVeg === true && brief.diet === "vegetarian" ? 2 : 0) + reviewBoost;
   const reasons = [queryMatch ? "Dish name matches a search theme" : "Found in nearby menu search"];
   if (matchedDish) reasons.push("Matches your requested dish");
   if (underMenuBudget) reasons.push("Menu price is within your budget before fees");
@@ -59,29 +87,54 @@ function rankLive(item: PreviewMenuItem, brief: MealBrief, queries: string[]): M
   if (item.isVeg === null) cautions.push("Diet classification is unconfirmed");
   if (item.priceInr === null) cautions.push("Menu price is unavailable");
   else if (item.priceInr > brief.budgetInr) cautions.push("Menu price alone exceeds your total budget");
+  if (review === "low-rating") cautions.push("Restaurant rating is low; check recent reviews before ordering");
+  if (review === "mixed-rating") cautions.push("Restaurant rating is below the well-reviewed threshold; check recent reviews");
+  if (review === "limited-feedback") cautions.push("Restaurant review history is limited or the count is unavailable");
+  if (review === "unknown") cautions.push("Restaurant rating and review count could not be verified");
   return {
     id: `${item.restaurantId}:${item.menuItemId}`, title: item.name, restaurant: item.restaurantName,
     imageUrl: item.imageUrl, menuPriceInr: item.priceInr,
     diet: item.isVeg === true ? "vegetarian" : item.isVeg === false ? "non-vegetarian" : "unknown",
     availability: item.inStock === true ? "available" : "unknown",
-    source: "swiggy-live", sourceUrl: null, nutritionSources: [], match: "unverified", reasons, cautions, score
+    source: "swiggy-live", sourceUrl: null,
+    restaurantReview: signal ? { rating: signal.rating, ratingsText: signal.ratingsText, status: review, source: "swiggy" } : null,
+    nutritionSources: [], match: "unverified", reasons, cautions, score
   };
 }
 
-export function rankLiveItems(items: PreviewMenuItem[], brief: MealBrief, queries: string[]): MealResult[] {
+export function rankLiveItems(items: PreviewMenuItem[], brief: MealBrief, queries: string[], signals: RestaurantSignal[] = []): MealResult[] {
+  const byRestaurant = new Map(signals.map(signal => [signal.id, signal]));
   const deduped = new Map<string, MealResult>();
   for (const item of items) {
-    const result = rankLive(item, brief, queries);
+    const result = rankLive(item, brief, queries, byRestaurant.get(item.restaurantId));
     if (result && (!deduped.has(result.id) || result.score > deduped.get(result.id)!.score)) deduped.set(result.id, result);
   }
-  return [...deduped.values()].sort((a, b) => b.score - a.score || a.title.localeCompare(b.title)).slice(0, 12);
+  const ranked = [...deduped.values()].sort((a, b) => b.score - a.score || a.title.localeCompare(b.title));
+  const selected: MealResult[] = [];
+  const perRestaurant = new Map<string, number>();
+  for (const result of ranked) {
+    const restaurantId = result.id.split(":")[0];
+    const count = perRestaurant.get(restaurantId) || 0;
+    if (count < 3) { selected.push(result); perRestaurant.set(restaurantId, count + 1); }
+    if (selected.length === 15) return selected;
+  }
+  for (const result of ranked) {
+    if (!selected.includes(result)) selected.push(result);
+    if (selected.length === 15) break;
+  }
+  return selected;
 }
 
-export async function searchWithSwiggy(brief: MealBrief, searchMenu: SearchMenu, queries = planQueries(brief)): Promise<MealSearchResponse> {
-  const settled = await Promise.allSettled(queries.map(query => searchMenu(query, brief.diet === "vegetarian")));
+export async function searchWithSwiggy(brief: MealBrief, searchMenu: SearchMenu, queries = planQueries(brief), searchRestaurants?: SearchRestaurants): Promise<MealSearchResponse> {
+  const [settled, reviewResults] = await Promise.all([
+    Promise.allSettled(queries.map(query => searchMenu(query, brief.diet === "vegetarian"))),
+    searchRestaurants ? Promise.allSettled(queries.slice(0, 2).map(searchRestaurants)) : Promise.resolve([])
+  ]);
   const warnings = settled.flatMap((result, index) => result.status === "rejected" ? [`Search for “${queries[index]}” failed; other results may still be available.`] : []);
   const items = settled.flatMap(result => result.status === "fulfilled" ? result.value : []);
-  return { version: 1, jobId: randomUUID(), source: "swiggy-live", queries, results: rankLiveItems(items, brief, queries), warnings, searchedAt: new Date().toISOString() };
+  const signals = reviewResults.flatMap(result => result.status === "fulfilled" ? result.value : []);
+  if (searchRestaurants && reviewResults.some(result => result.status === "rejected")) warnings.push("Some restaurant review signals could not be loaded.");
+  return { version: 1, jobId: randomUUID(), source: "swiggy-live", queries, results: rankLiveItems(items, brief, queries, signals), warnings, searchedAt: new Date().toISOString() };
 }
 
 function validWebUrl(value: string): boolean {
@@ -121,7 +174,6 @@ export async function searchWithWeb(brief: MealBrief, searchWeb: WebSearch, plan
   for (const [index, result] of settled.entries()) {
     if (result.status !== "fulfilled") continue;
     for (const lead of result.value) {
-      if (results.length >= 12) break;
       if (!validWebUrl(lead.url) || seen.has(lead.url)) continue;
       const domain = trustedDeliveryHost(lead.url);
       if (!domain) continue;
@@ -141,7 +193,7 @@ export async function searchWithWeb(brief: MealBrief, searchWeb: WebSearch, plan
       if (exclusions(brief.wish).some(term => `${title} ${lead.snippet}`.toLowerCase().includes(term))) continue;
       results.push({
         id: lead.url, title, restaurant: domain, imageUrl: lead.imageUrl,
-        menuPriceInr: null, diet: "unknown", availability: "unknown", source: "web-lead", sourceUrl: lead.url,
+        menuPriceInr: null, diet: "unknown", availability: "unknown", source: "web-lead", sourceUrl: lead.url, restaurantReview: null,
         nutritionSources: [], match: "unverified", reasons: ["Found on the public web for your city and search theme"],
         cautions: ["This is a search lead, not a verified live menu item", "Price, availability, diet, protein, calories, and delivery fees are unverified"],
         score: matchCount * 5 + (domain === "swiggy.com" ? 2 : 0)
@@ -149,13 +201,13 @@ export async function searchWithWeb(brief: MealBrief, searchWeb: WebSearch, plan
     }
   }
   results.sort((a, b) => b.score - a.score || a.title.localeCompare(b.title));
-  return { version: 1, jobId: randomUUID(), source: "web-leads", queries, results, warnings, searchedAt: new Date().toISOString() };
+  return { version: 1, jobId: randomUUID(), source: "web-leads", queries, results: results.slice(0, 15), warnings, searchedAt: new Date().toISOString() };
 }
 
 export async function serpApiSearch(query: string): Promise<Array<{ title: string; url: string; snippet: string; imageUrl: string | null }>> {
   const key = process.env.SERPAPI_API_KEY;
   if (!key) throw new Error("SerpApi is not configured yet.");
-  const params = new URLSearchParams({ engine: "google", q: query, gl: "in", hl: "en", num: "6", api_key: key });
+  const params = new URLSearchParams({ engine: "google", q: query, gl: "in", hl: "en", num: "10", api_key: key });
   const response = await fetch(`https://serpapi.com/search.json?${params}`, { signal: AbortSignal.timeout(9000) });
   if (!response.ok) throw new Error(`SerpApi search failed (${response.status}).`);
   const payload = await response.json() as { error?: string; organic_results?: Array<{ title?: string; link?: string; snippet?: string; thumbnail?: string }> };

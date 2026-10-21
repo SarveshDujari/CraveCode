@@ -10,7 +10,7 @@ import {
   type StoredOAuthClientInformation,
   type StoredOAuthTokens
 } from "@modelcontextprotocol/client";
-import type { PreviewMenuItem } from "../shared/contracts.ts";
+import type { PreviewMenuItem, RestaurantSignal } from "../shared/contracts.ts";
 
 const endpoint = new URL("https://mcp.swiggy.com/food");
 
@@ -244,6 +244,25 @@ export async function searchMenu(session: SwiggySession, addressId: string, quer
   });
   session.menuItems = new Map(normalized.map(item => [item.menuItemId, item]));
   return normalized;
+}
+
+export async function searchRestaurants(session: SwiggySession, addressId: string, query: string): Promise<RestaurantSignal[]> {
+  if (!session.addressIds.has(addressId)) throw new Error("Choose a saved address first.");
+  const payload = await call(session, "search_restaurants", { addressId, query });
+  const restaurants = Array.isArray(payload.restaurants) ? payload.restaurants : [];
+  return restaurants.flatMap(value => {
+    const record = object(value);
+    const id = string(record?.id);
+    if (!id) return [];
+    const rating = finiteNumber(record?.avgRating);
+    const status = string(record?.availabilityStatus);
+    return [{
+      id,
+      rating: rating !== null && rating >= 0 && rating <= 5 ? rating : null,
+      ratingsText: string(record?.totalRatings),
+      availabilityStatus: status === "OPEN" || status === "CLOSED" || status === "UNAVAILABLE" ? status : null
+    }];
+  });
 }
 
 export async function getCart(session: SwiggySession, addressId: string): Promise<JsonObject> {

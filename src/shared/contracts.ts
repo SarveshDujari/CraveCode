@@ -13,6 +13,7 @@ export const mealBriefSchema = z.object({
   maxCaloriesKcal: z.number().finite().min(100).max(3000),
   budgetInr: z.number().finite().min(50).max(10000),
   strictNutrition: z.boolean().default(true),
+  preferWellReviewed: z.boolean().default(true),
   dish: z.string().trim().max(80).default(""),
   city: z.string().trim().max(80).default(""),
   cuisine: z.string().trim().max(80).default(""),
@@ -83,12 +84,27 @@ export type PreviewMenuItem = {
   hasCustomizations: boolean;
 };
 
+export type RestaurantSignal = {
+  id: string;
+  rating: number | null;
+  ratingsText: string | null;
+  availabilityStatus: "OPEN" | "CLOSED" | "UNAVAILABLE" | null;
+};
+
+export const restaurantReviewSchema = z.object({
+  rating: z.number().min(0).max(5).nullable(),
+  ratingsText: z.string().nullable(),
+  status: z.enum(["well-reviewed", "limited-feedback", "mixed-rating", "low-rating", "unknown"]),
+  source: z.literal("swiggy")
+});
+
 export const mealResultSchema = z.object({
   id: z.string(), title: z.string(), restaurant: z.string(), imageUrl: z.string().nullable(),
   menuPriceInr: z.number().nonnegative().nullable(),
   diet: z.enum(["vegetarian", "non-vegetarian", "unknown"]),
   availability: z.enum(["available", "unknown"]),
   source: z.enum(["swiggy-live", "web-lead"]), sourceUrl: z.url().nullable(),
+  restaurantReview: restaurantReviewSchema.nullable(),
   nutritionSources: z.array(z.object({ title: z.string(), url: z.url() })),
   match: z.enum(["closest", "unverified"]), reasons: z.array(z.string()), cautions: z.array(z.string()), score: z.number()
 });

@@ -1,12 +1,12 @@
 import { createStep, createWorkflow } from "@mastra/core/workflows";
 import * as Sentry from "@sentry/node";
 import { z } from "zod";
-import { mealBriefSchema, mealSearchResponseSchema, type MealBrief, type MealSearchResponse, type PreviewMenuItem } from "../shared/contracts.ts";
+import { mealBriefSchema, mealSearchResponseSchema, type MealBrief, type MealSearchResponse, type PreviewMenuItem, type RestaurantSignal } from "../shared/contracts.ts";
 import { searchWithSwiggy, searchWithWeb, serpApiSearch } from "./meal-search.ts";
 import { suggestQueries } from "./gemma-planner.ts";
 
 type SearchMode =
-  | { source: "swiggy"; searchMenu: (query: string, vegOnly: boolean) => Promise<PreviewMenuItem[]> }
+  | { source: "swiggy"; searchMenu: (query: string, vegOnly: boolean) => Promise<PreviewMenuItem[]>; searchRestaurants?: (query: string) => Promise<RestaurantSignal[]> }
   | { source: "web"; searchWeb?: typeof serpApiSearch };
 
 // The workflow receives a validated brief; a bounded planner picks queries, discovery
@@ -26,7 +26,7 @@ export async function runMealWorkflow(brief: MealBrief, mode: SearchMode): Promi
     id: "discover-food", inputSchema: plannedSchema, outputSchema: resultSchema,
     execute: async ({ inputData }) => Sentry.startSpan({ name: mode.source === "swiggy" ? "meal.search.swiggy" : "meal.search.web", op: "meal.search" }, async () => ({
       result: mode.source === "swiggy"
-        ? await searchWithSwiggy(inputData.brief, mode.searchMenu, inputData.queries)
+        ? await searchWithSwiggy(inputData.brief, mode.searchMenu, inputData.queries, mode.searchRestaurants)
         : await searchWithWeb(inputData.brief, mode.searchWeb || serpApiSearch, inputData.queries)
     }))
   });

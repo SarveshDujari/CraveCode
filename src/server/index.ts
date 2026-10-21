@@ -7,6 +7,7 @@ import { z } from "zod";
 import * as Sentry from "@sentry/node";
 import { mealBriefSchema } from "../shared/contracts.ts";
 import { runMealWorkflow } from "./workflow.ts";
+import { lookupNutritionReference } from "./nutrition-reference.ts";
 import { getDatabase, initializeDatabase, closeDatabase } from "./db.ts";
 import {
   beginSwiggyConnection,
@@ -17,7 +18,8 @@ import {
   getSwiggySession,
   inspectCartTool,
   probeSimpleCart,
-  searchMenu
+  searchMenu,
+  searchRestaurants
 } from "./swiggy.ts";
 
 const port = Number(process.env.PORT || 8787);
@@ -27,6 +29,9 @@ const distRoot = resolve(process.cwd(), "dist");
 if (process.env.SENTRY_DSN) Sentry.init({ dsn: process.env.SENTRY_DSN, tracesSampleRate: 1, defaultIntegrations: false });
 let webSearchWindowStart = Date.now();
 let webSearchesThisHour = 0;
+let nutritionSearchWindowStart = Date.now();
+let nutritionSearchesThisHour = 0;
+const recentSearches = new Map<string, { seenAt: number; titles: Map<string, string> }>();
 
 function requestOrigin(request: IncomingMessage): URL {
   const host = request.headers.host || "";
@@ -122,7 +127,7 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
   const pathname = url.pathname;
 
   if (method === "GET" && pathname === "/api/health") {
-    json(response, 200, { ok: true, service: "mealpilot", phase: 2, searchRevision: 3 });
+    json(response, 200, { ok: true, service: "mealpilot", phase: 2, searchRevision: 4 });
     return;
   }
   if (method === "GET" && pathname === "/api/system") {
@@ -161,12 +166,17 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
       json(response, 400, { error: "Choose a saved delivery address before searching live Swiggy menus." }); return;
     }
     if (swiggyLocalEnabled && session?.client && brief.addressId) {
-      result = await Sentry.startSpan({ name: "meal.search.request", op: "meal.search" }, () => runMealWorkflow(brief, { source: "swiggy", searchMenu: (query, vegOnly) => searchMenu(session, brief.addressId!, query, vegOnly) }));
+      result = await Sentry.startSpan({ name: "meal.search.request", op: "meal.search" }, () => runMealWorkflow(brief, {
+        source: "swiggy",
+        searchMenu: (query, vegOnly) => searchMenu(session, brief.addressId!, query, vegOnly),
+        searchRestaurants: query => searchRestaurants(session, brief.addressId!, query)
+      }));
     } else {
       if (!brief.city.trim()) { json(response, 400, { error: swiggyLocalEnabled ? "Connect Swiggy and choose an address to search live menus." : "Enter your city for public web discovery." }); return; }
       if (!process.env.SERPAPI_API_KEY) { json(response, 503, { error: "Public web search is being connected. Please check back shortly." }); return; }
       if (Date.now() - webSearchWindowStart > 3_600_000) { webSearchWindowStart = Date.now(); webSearchesThisHour = 0; }
-      if (++webSearchesThisHour > 30) { json(response, 429, { error: "Public search is at its hourly limit. Please try later." }); return; }
+      // Three Google requests per public search; leave room within SerpApi's free hourly allowance for references.
+      if (++webSearchesThisHour > 12) { json(response, 429, { error: "Public search is at its hourly limit. Please try later." }); return; }
       result = await Sentry.startSpan({ name: "meal.search.request", op: "meal.search" }, () => runMealWorkflow(brief, { source: "web" }));
     }
     if (getDatabase()) {
@@ -179,7 +189,23 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
         result.warnings.push("Search results could not be saved for later review.");
       }
     }
+    recentSearches.set(result.jobId, { seenAt: Date.now(), titles: new Map(result.results.map(item => [item.id, item.title])) });
+    for (const [id, search] of recentSearches) if (Date.now() - search.seenAt > 30 * 60_000) recentSearches.delete(id);
     json(response, 200, result);
+    return;
+  }
+
+  if (method === "POST" && pathname === "/api/nutrition-reference") {
+    if (!allowedOrigin(request)) { json(response, 403, { error: "Invalid request origin." }); return; }
+    const input = z.object({ jobId: z.uuid(), itemId: z.string().min(1).max(500) }).parse(await body(request));
+    const search = recentSearches.get(input.jobId);
+    if (!search || Date.now() - search.seenAt > 30 * 60_000) { json(response, 404, { error: "Search again to check a nutrition reference." }); return; }
+    const dish = search.titles.get(input.itemId);
+    if (!dish) { json(response, 404, { error: "This item was not in the search results." }); return; }
+    if (Date.now() - nutritionSearchWindowStart > 3_600_000) { nutritionSearchWindowStart = Date.now(); nutritionSearchesThisHour = 0; }
+    if (++nutritionSearchesThisHour > 10) { json(response, 429, { error: "Nutrition lookups are at their hourly limit." }); return; }
+    const reference = await lookupNutritionReference(dish);
+    json(response, 200, { reference, scope: "generic-food-reference", exactMenuNutrition: false });
     return;
   }
 

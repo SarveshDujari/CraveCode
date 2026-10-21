@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Client } from "@modelcontextprotocol/client";
-import { createSwiggySession, getAddresses, probeSimpleCart, searchMenu } from "./swiggy.ts";
+import { createSwiggySession, getAddresses, probeSimpleCart, searchMenu, searchRestaurants } from "./swiggy.ts";
 
 const dish = {
   menu_item_id: "dish-1",
@@ -31,6 +31,24 @@ test("saved addresses include later pages without exposing address details", asy
   });
   assert.deepEqual(await getAddresses(session), [{ id: "a1", label: "Home" }, { id: "a2", label: "Office" }]);
   assert.deepEqual([...session.addressIds], ["a1", "a2"]);
+});
+
+test("restaurant search keeps only documented rating and availability fields", async () => {
+  const session = createSwiggySession("http://localhost/callback");
+  session.addressIds.add("a1");
+  session.client = fakeClient((name, args) => {
+    assert.equal(name, "search_restaurants");
+    assert.deepEqual(args, { addressId: "a1", query: "paneer" });
+    return { restaurants: [
+      { id: "r1", name: "Kitchen", avgRating: 4.3, totalRatings: "100+", availabilityStatus: "OPEN" },
+      { id: "r2", avgRating: 7, availabilityStatus: "mystery" },
+      { name: "Missing ID", avgRating: 4.9 }
+    ] };
+  });
+  assert.deepEqual(await searchRestaurants(session, "a1", "paneer"), [
+    { id: "r1", rating: 4.3, ratingsText: "100+", availabilityStatus: "OPEN" },
+    { id: "r2", rating: null, ratingsText: null, availabilityStatus: null }
+  ]);
 });
 
 test("cart probe refuses an item that gains required customization on scoped recheck", async () => {
