@@ -8,7 +8,7 @@ This is an evidence log, not a claim that the whole milestone's external integra
 | --- | --- |
 | Build | `npm run build` succeeded: Vite frontend plus bundled Node API. |
 | Type check | `npm run check` succeeded. |
-| Contract tests | `npm test`: 3 passed. |
+| Contract and safety tests | `npm test`: 6 passed, including saved-address pagination, a changed-item refusal, and an uncertain cart write verified by read-back. |
 | Running app | Production build served `GET /` (HTTP 200), `GET /api/health` (`ok: true`), and a valid `POST /api/briefs/validate`. |
 | Browser UI | Hero, meal form, result-preview labels, and form submission were inspected in the local browser. A local-origin validation bug found during the first submit was fixed and retested. |
 | CraveCode redesign | Eight supplied illustrations added to a white orbit hero; dark meal form and white results area implemented. Browser checks covered desktop, 390px, and 320px layouts, brief submission, and the honest disconnected-results state. Live result cards still require Swiggy authorization. |

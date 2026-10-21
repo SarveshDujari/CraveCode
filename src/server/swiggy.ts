@@ -197,24 +197,30 @@ async function call(session: SwiggySession, name: string, args: JsonObject): Pro
 }
 
 export async function getAddresses(session: SwiggySession): Promise<Array<{ id: string; label: string }>> {
-  const payload = await call(session, "get_addresses", {});
-  const addresses = Array.isArray(payload.addresses) ? payload.addresses : [];
-  const normalized = addresses.flatMap(value => {
-    const record = object(value);
-    const id = string(record?.id);
-    if (!id) return [];
-    return [{ id, label: string(record?.addressTag) || string(record?.addressCategory) || "Saved address" }];
-  });
+  const normalized: Array<{ id: string; label: string }> = [];
+  for (let page = 1; page <= 10; page++) {
+    const payload = await call(session, "get_addresses", { page });
+    const addresses = Array.isArray(payload.addresses) ? payload.addresses : [];
+    for (const value of addresses) {
+      const record = object(value);
+      const id = string(record?.id);
+      if (id && !normalized.some(address => address.id === id)) {
+        normalized.push({ id, label: string(record?.addressTag) || string(record?.addressCategory) || "Saved address" });
+      }
+    }
+    if (object(payload.pagination)?.hasMore !== true) break;
+  }
   session.addressIds = new Set(normalized.map(address => address.id));
   return normalized;
 }
 
-export async function searchMenu(session: SwiggySession, addressId: string, query: string, vegOnly: boolean): Promise<PreviewMenuItem[]> {
+export async function searchMenu(session: SwiggySession, addressId: string, query: string, vegOnly: boolean, restaurantId?: string): Promise<PreviewMenuItem[]> {
   if (!session.addressIds.has(addressId)) throw new Error("Choose a saved address first.");
   const payload = await call(session, "search_menu", {
     addressId,
     query,
-    ...(vegOnly ? { vegFilter: 1 } : {})
+    ...(vegOnly ? { vegFilter: 1 } : {}),
+    ...(restaurantId ? { restaurantIdOfAddedItem: restaurantId } : {})
   });
   const items = Array.isArray(payload.items) ? payload.items : [];
   const normalized = items.flatMap(value => {
@@ -269,6 +275,13 @@ export async function probeSimpleCart(session: SwiggySession, addressId: string,
   if (!item || item.hasCustomizations || item.inStock === false) {
     throw new Error("Choose an available menu item without required variants or add-ons for this first integration check.");
   }
+  // Cross-restaurant search is for discovery; Swiggy requires a restaurant-scoped
+  // lookup for complete item details before a cart mutation.
+  const scopedItems = await searchMenu(session, addressId, item.name, false, item.restaurantId);
+  const current = scopedItems.find(value => value.menuItemId === menuItemId && value.restaurantId === item.restaurantId);
+  if (!current || current.hasCustomizations || current.inStock === false) {
+    throw new Error("This dish changed or needs customization. Search again before adding it to the cart.");
+  }
   const before = await getCart(session, addressId);
   if (Array.isArray(before.items) && before.items.length > 0) {
     throw new Error("The existing Swiggy cart is not empty. This integration check will not replace it.");
@@ -283,8 +296,8 @@ export async function probeSimpleCart(session: SwiggySession, addressId: string,
   let updateError: string | null = null;
   try {
     await call(session, "update_food_cart", {
-      restaurantId: item.restaurantId,
-      restaurantName: item.restaurantName,
+      restaurantId: current.restaurantId,
+      restaurantName: current.restaurantName,
       addressId,
       cartItems: [{ menu_item_id: item.menuItemId, quantity: 1 }]
     });
@@ -298,7 +311,7 @@ export async function probeSimpleCart(session: SwiggySession, addressId: string,
   const verified = selectedPresent && typeof after.toPayInr === "number";
   return {
     status: verified ? "verified" : "needs-review",
-    itemName: item.name,
+    itemName: current.name,
     cart: after,
     ...(updateError ? { updateError } : {})
   };
