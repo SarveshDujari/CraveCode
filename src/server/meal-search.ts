@@ -7,9 +7,9 @@ type WebSearch = (query: string) => Promise<Array<{ title: string; url: string; 
 
 const mealTerms: Record<MealBrief["goal"], Record<MealBrief["diet"], string[]>> = {
   "high-protein": {
-    vegetarian: ["paneer tikka", "dal bowl", "tofu bowl", "chole"],
-    "egg-friendly": ["egg bowl", "paneer tikka", "egg sandwich", "dal bowl"],
-    any: ["chicken bowl", "paneer tikka", "egg bowl", "dal bowl"]
+    vegetarian: ["paneer tikka", "chole", "dal tadka", "soya chaap"],
+    "egg-friendly": ["egg bhurji", "paneer tikka", "chole", "dal tadka"],
+    any: ["grilled chicken", "paneer tikka", "egg bhurji", "dal tadka"]
   },
   balanced: {
     vegetarian: ["veg thali", "paneer bowl", "dal rice", "vegetable wrap"],
@@ -168,7 +168,7 @@ function swiggyCitySlug(city: string): string {
 }
 
 export async function searchWithWeb(brief: MealBrief, searchWeb: WebSearch, plannedQueries = planQueries(brief)): Promise<MealSearchResponse> {
-  const queries = plannedQueries.slice(0, 3);
+  const queries = plannedQueries.slice(0, 4);
   const city = brief.city.trim();
   if (!city) throw new Error("Enter a city to explore public web results.");
   const webQueries = queries.map(query => `${query} ${city} order online site:swiggy.com/city/${swiggyCitySlug(city)}`);
@@ -211,13 +211,20 @@ export async function searchWithWeb(brief: MealBrief, searchWeb: WebSearch, plan
   return { version: 1, jobId: randomUUID(), source: "web-leads", queries, results: results.slice(0, 15), warnings, searchedAt: new Date().toISOString() };
 }
 
+const webCache = new Map<string, { at: number; results: Array<{ title: string; url: string; snippet: string; imageUrl: string | null }> }>();
+
 export async function serpApiSearch(query: string): Promise<Array<{ title: string; url: string; snippet: string; imageUrl: string | null }>> {
   const key = process.env.SERPAPI_API_KEY;
   if (!key) throw new Error("SerpApi is not configured yet.");
+  const cached = webCache.get(query);
+  if (cached && Date.now() - cached.at < 60 * 60_000) return cached.results;
   const params = new URLSearchParams({ engine: "google", q: query, gl: "in", hl: "en", num: "10", api_key: key });
-  const response = await fetch(`https://serpapi.com/search.json?${params}`, { signal: AbortSignal.timeout(9000) });
+  const response = await fetch(`https://serpapi.com/search.json?${params}`, { signal: AbortSignal.timeout(18000) });
   if (!response.ok) throw new Error(`SerpApi search failed (${response.status}).`);
   const payload = await response.json() as { error?: string; organic_results?: Array<{ title?: string; link?: string; snippet?: string; thumbnail?: string }> };
   if (payload.error) throw new Error(payload.error);
-  return (payload.organic_results || []).flatMap(row => row.title && row.link ? [{ title: row.title, url: row.link, snippet: row.snippet || "", imageUrl: row.thumbnail || null }] : []);
+  const results = (payload.organic_results || []).flatMap(row => row.title && row.link ? [{ title: row.title, url: row.link, snippet: row.snippet || "", imageUrl: row.thumbnail || null }] : []);
+  webCache.set(query, { at: Date.now(), results });
+  if (webCache.size > 200) webCache.delete(webCache.keys().next().value!);
+  return results;
 }

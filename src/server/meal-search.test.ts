@@ -11,7 +11,7 @@ const item = (name: string, id: string, overrides: Partial<PreviewMenuItem> = {}
 });
 
 test("an empty dish produces bounded goal-aware searches", () => {
-  assert.deepEqual(planQueries(brief), ["paneer tikka", "dal bowl", "tofu bowl", "chole"]);
+  assert.deepEqual(planQueries(brief), ["paneer tikka", "chole", "dal tadka", "soya chaap"]);
   assert.equal(planQueries({ ...brief, dish: "dosa" })[0], "dosa");
   assert.deepEqual(planQueries({ ...brief, maxCaloriesKcal: 400 }), ["grilled paneer", "tofu salad", "sprouts chaat", "dal soup"]);
 });
@@ -21,7 +21,7 @@ test("live search deduplicates, excludes unavailable/nonveg, and never claims an
   const result = await searchWithSwiggy(brief, async query => {
     calls.push(query);
     if (query === "paneer tikka") return [item("Paneer Tikka", "p1"), item("Chicken Tikka", "c1", { isVeg: false })];
-    if (query === "dal bowl") return [item("Paneer Tikka", "p1"), item("Dal Bowl", "d1", { inStock: false })];
+    if (query === "chole") return [item("Paneer Tikka", "p1"), item("Dal Bowl", "d1", { inStock: false })];
     return [];
   });
   assert.equal(calls.length, 4);

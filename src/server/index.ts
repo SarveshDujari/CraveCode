@@ -175,8 +175,8 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
       if (!brief.city.trim()) { json(response, 400, { error: swiggyLocalEnabled ? "Connect Swiggy and choose an address to search live menus." : "Enter your city for public web discovery." }); return; }
       if (!process.env.SERPAPI_API_KEY) { json(response, 503, { error: "Public web search is being connected. Please check back shortly." }); return; }
       if (Date.now() - webSearchWindowStart > 3_600_000) { webSearchWindowStart = Date.now(); webSearchesThisHour = 0; }
-      // Three Google requests per public search; leave room within SerpApi's free hourly allowance for references.
-      if (++webSearchesThisHour > 12) { json(response, 429, { error: "Public search is at its hourly limit. Please try later." }); return; }
+      // Four Google requests per uncached public search; reserve free-plan throughput for nutrition references.
+      if (++webSearchesThisHour > 10) { json(response, 429, { error: "Public search is at its hourly limit. Please try later." }); return; }
       result = await Sentry.startSpan({ name: "meal.search.request", op: "meal.search" }, () => runMealWorkflow(brief, { source: "web" }));
     }
     if (getDatabase()) {
