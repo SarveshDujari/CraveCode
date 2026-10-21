@@ -111,7 +111,7 @@ function MenuCard({ item }: { item: MealResult }) {
     <div className="menu-card-body">
       <div className="menu-card-top"><span>{item.diet === "unknown" ? "DIET UNCONFIRMED" : item.diet.toUpperCase()}</span><span>{item.availability === "available" ? "AVAILABLE" : "STOCK UNCONFIRMED"}</span></div>
       <h3>{item.title}</h3>
-      <p className="restaurant-name">{item.restaurant}</p>
+      <p className="restaurant-name">{item.source === "web-lead" ? "Source: " : ""}{item.restaurant}</p>
       <div className="menu-card-facts"><div><small>{item.source === "swiggy-live" ? "MENU PRICE" : "PRICE"}</small><strong>{item.menuPriceInr === null ? "Unknown" : `₹${item.menuPriceInr}`}</strong><span>{item.menuPriceInr === null ? "Check the source" : "Before delivery and fees"}</span></div><div><small>NUTRITION</small><strong>Unknown</strong><span>No exact macro match claimed</span></div></div>
       <details className="menu-card-details"><summary>Why this appeared <span aria-hidden="true">+</span></summary><div className="card-explanation">{item.reasons.map(reason => <p key={reason}>✓ {reason}</p>)}{item.cautions.map(caution => <p key={caution}>· {caution}</p>)}</div></details>
       {item.sourceUrl && <a className="source-link" href={item.sourceUrl} target="_blank" rel="noopener noreferrer">Open source ↗</a>}

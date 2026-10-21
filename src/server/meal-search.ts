@@ -88,19 +88,31 @@ function validWebUrl(value: string): boolean {
   try { return new URL(value).protocol === "https:"; } catch { return false; }
 }
 
+const deliveryHosts = ["swiggy.com", "zomato.com", "magicpin.in", "eatclub.in", "freshmenu.com"];
+
+function trustedDeliveryHost(url: string): string | null {
+  const host = new URL(url).hostname.toLowerCase();
+  return deliveryHosts.find(domain => host === domain || host.endsWith(`.${domain}`)) || null;
+}
+
 export async function searchWithWeb(brief: MealBrief, searchWeb: WebSearch, plannedQueries = planQueries(brief)): Promise<MealSearchResponse> {
   const queries = plannedQueries.slice(0, 3);
   const city = brief.city.trim();
   if (!city) throw new Error("Enter a city to explore public web results.");
-  const webQueries = queries.map(query => `${query} ${city} food delivery menu`);
+  const webQueries = queries.map(query => `${query} ${city} order online (site:swiggy.com OR site:zomato.com OR site:magicpin.in)`);
   const settled = await Promise.allSettled(webQueries.map(searchWeb));
   const warnings = settled.flatMap((result, index) => result.status === "rejected" ? [`Web search for “${queries[index]}” failed.`] : []);
   const seen = new Set<string>();
   const results: MealResult[] = [];
-  for (const result of settled) {
+  for (const [index, result] of settled.entries()) {
     if (result.status !== "fulfilled") continue;
     for (const lead of result.value) {
+      if (results.length >= 12) break;
       if (!validWebUrl(lead.url) || seen.has(lead.url)) continue;
+      const domain = trustedDeliveryHost(lead.url);
+      if (!domain) continue;
+      const matchCount = tokens(queries[index]).filter(word => tokens(`${lead.title} ${new URL(lead.url).pathname}`).includes(word)).length;
+      if (matchCount === 0) continue;
       seen.add(lead.url);
       const title = lead.title.trim();
       if (!title || /recipe|homemade|how to make/i.test(`${title} ${lead.snippet}`)) continue;
@@ -108,16 +120,16 @@ export async function searchWithWeb(brief: MealBrief, searchWeb: WebSearch, plan
       if (brief.diet === "vegetarian" && /\begg\b/i.test(`${title} ${lead.snippet}`)) continue;
       if (exclusions(brief.wish).some(term => `${title} ${lead.snippet}`.toLowerCase().includes(term))) continue;
       results.push({
-        id: lead.url, title, restaurant: new URL(lead.url).hostname.replace(/^www\./, ""), imageUrl: lead.imageUrl,
+        id: lead.url, title, restaurant: domain, imageUrl: lead.imageUrl,
         menuPriceInr: null, diet: "unknown", availability: "unknown", source: "web-lead", sourceUrl: lead.url,
         nutritionSources: [], match: "unverified", reasons: ["Found on the public web for your city and search theme"],
         cautions: ["This is a search lead, not a verified live menu item", "Price, availability, diet, protein, calories, and delivery fees are unverified"],
-        score: Math.max(0, 10 - results.length)
+        score: matchCount * 5 + (domain === "swiggy.com" ? 2 : 0)
       });
-      if (results.length >= 12) break;
     }
   }
-  return { version: 1, jobId: randomUUID(), source: "web-leads", queries: webQueries, results, warnings, searchedAt: new Date().toISOString() };
+  results.sort((a, b) => b.score - a.score || a.title.localeCompare(b.title));
+  return { version: 1, jobId: randomUUID(), source: "web-leads", queries, results, warnings, searchedAt: new Date().toISOString() };
 }
 
 export async function serpApiSearch(query: string): Promise<Array<{ title: string; url: string; snippet: string; imageUrl: string | null }>> {

@@ -40,13 +40,13 @@ test("egg-friendly and explicit exclusions reject unsuitable dishes", async () =
 
 test("public results are labeled as leads with no fabricated price or availability", async () => {
   const result = await searchWithWeb({ ...brief, city: "Bengaluru" }, async () => [
-    { title: "Paneer bowls nearby", url: "https://example.com/menu", snippet: "Order paneer bowls", imageUrl: null }
+    { title: "Paneer bowls nearby", url: "https://www.swiggy.com/city/bangalore/paneer-bowls", snippet: "Order paneer bowls", imageUrl: null }
   ]);
   assert.equal(result.source, "web-leads");
   assert.equal(result.results.length, 1);
   assert.equal(result.results[0].menuPriceInr, null);
   assert.equal(result.results[0].availability, "unknown");
-  assert.equal(result.results[0].sourceUrl, "https://example.com/menu");
+  assert.equal(result.results[0].sourceUrl, "https://www.swiggy.com/city/bangalore/paneer-bowls");
 });
 
 test("Mastra workflow returns an evidence-labeled candidate", async () => {
@@ -58,9 +58,18 @@ test("Mastra workflow returns an evidence-labeled candidate", async () => {
 
 test("Mastra public workflow preserves unverified web labeling", async () => {
   const result = await runMealWorkflow({ ...brief, city: "Bengaluru" }, { source: "web", searchWeb: async () => [
-    { title: "Paneer near me", url: "https://example.com/food", snippet: "Order food", imageUrl: null }
+    { title: "Paneer near me", url: "https://www.swiggy.com/paneer-near-me", snippet: "Order food", imageUrl: null }
   ] });
   assert.equal(result.source, "web-leads");
   assert.equal(result.results[0].diet, "unknown");
   assert.equal(result.results[0].menuPriceInr, null);
+});
+
+test("public discovery drops unrelated menu pages and caps output", async () => {
+  const result = await searchWithWeb({ ...brief, city: "Bengaluru", dish: "paneer" }, async () => [
+    { title: "Menu", url: "https://en.wikipedia.org/wiki/Menu", snippet: "Menu definition", imageUrl: null },
+    ...Array.from({ length: 20 }, (_, index) => ({ title: `Paneer restaurant ${index}`, url: `https://www.swiggy.com/paneer-${index}`, snippet: "Order online", imageUrl: null }))
+  ]);
+  assert.equal(result.results.length, 12);
+  assert.ok(result.results.every(item => item.sourceUrl?.includes("swiggy.com")));
 });
