@@ -174,14 +174,14 @@ export function App() {
     setResultMessage("");
     setSearchResult(null);
     setSearchStatus("searching");
+    setSubmittedBrief(checked.data);
+    showResults();
     try {
       const result = await readApi<MealSearchResponse>("/api/meal-search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(checked.data)
       });
-      setSubmittedBrief(checked.data);
-      showResults();
       setSearchResult(result);
       setSearchStatus("done");
       setResultMessage(result.source === "swiggy-live" ? "Ranked live menu choices. Nutrition and final totals still need verification." : "Public web leads for your city. Open a source to check the current menu; these are not confirmed deliverable items.");
