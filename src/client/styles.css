@@ -16,7 +16,7 @@ h1,h2,h3,p{margin-top:0}
 .site-header nav a,.header-link,.site-footer a{transition:color .2s ease}
 .site-header nav a:hover,.header-link:hover,.site-footer a:hover{color:#de6641}
 .header-link{font-size:12px;font-weight:800;border-bottom:1px solid currentColor;padding:8px 0;white-space:nowrap}
-.header-link span,.button span,.card-action span,.text-link span{font-size:18px;margin-left:13px;line-height:0}
+.header-link span,.button span,.text-link span{font-size:18px;margin-left:13px;line-height:0}
 :is(a,button,input,select,summary):focus-visible{outline:3px solid #ff855f;outline-offset:4px}
 .hero{--hero-shift:0px;--hero-scale:1;--hero-opacity:1;position:relative;display:grid;place-items:center;min-height:max(760px,100svh);background:#fff;isolation:isolate;overflow:hidden}
 .hero::before{content:"";position:absolute;inset:7% 13% 10%;z-index:-1;background:radial-gradient(ellipse at center,#fff5ed 0%,#fff 68%);opacity:.76;pointer-events:none}
@@ -144,8 +144,6 @@ h1,h2,h3,p{margin-top:0}
 .menu-card-details summary{display:flex;justify-content:space-between;cursor:pointer;list-style:none;padding:15px 0;font-size:11px;font-weight:800}
 .menu-card-details summary::-webkit-details-marker{display:none}
 .menu-card-details p{font-size:11px;line-height:1.6;color:#78716c;padding-bottom:13px;margin:0}
-.card-action{display:flex;align-items:center;justify-content:space-between;width:100%;border:0;background:transparent;color:#ad4d2e;font-size:12px;font-weight:800;padding:19px 0 0;text-align:left}
-.card-action:disabled{color:#a6a09b;cursor:not-allowed}
 .skeleton-card{height:410px;border-radius:20px;background:linear-gradient(110deg,#f1f0ed 8%,#faf9f6 18%,#f1f0ed 33%);background-size:200% 100%;animation:skeleton 1.5s linear infinite}
 @keyframes skeleton{to{background-position-x:-200%}}
 .results-empty{min-height:345px;border:1px solid #eae6e0;border-radius:22px;background:radial-gradient(circle at 50% 0,#fff8f2 0,#fff 52%);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:45px 24px}
@@ -153,10 +151,6 @@ h1,h2,h3,p{margin-top:0}
 .results-empty h3{font-family:Outfit,"DM Sans",sans-serif;font-size:clamp(27px,3vw,38px);letter-spacing:-.06em;margin:0 0 9px}
 .results-empty p{max-width:440px;color:#7b746f;font-size:13px;line-height:1.65;margin:0 0 23px}
 .text-link{font-size:12px;font-weight:800;color:#ad4d2e;border-bottom:1px solid currentColor;padding-bottom:5px}
-.cart-audit{display:flex;flex-direction:column;gap:6px;border:1px solid #ead9c9;background:#fff9f3;border-radius:14px;padding:20px;margin-top:25px}
-.cart-audit span{font-size:9px;letter-spacing:1.5px;font-weight:800;color:#ac684a}
-.cart-audit strong{font-size:17px}
-.cart-audit p{font-size:12px;color:#73675e;margin:0}
 .results-footnote{display:flex;align-items:flex-start;gap:14px;border-top:1px solid #e8e5e1;margin-top:46px;padding-top:22px;color:#77716b}
 .results-footnote span{color:#e46c44;font-size:22px;line-height:.9}
 .results-footnote p{max-width:630px;font-size:12px;line-height:1.6;margin:0}

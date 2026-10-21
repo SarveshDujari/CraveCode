@@ -2,7 +2,7 @@
 
 CraveCode is a meal-discovery agent in progress. Give it a budget, diet, protein and calorie targets, and optional food preferences; the planned agent will search orderable meals, explain evidence and tradeoffs, and prepare a selected Swiggy cart for review. It never places an order automatically.
 
-The project is being built in [four phases](./FOUR_PHASE_ROADMAP.md). The [architecture](./ARCHITECTURE.md) and [frontend design](./FRONTEND_DESIGN.md) set the constraints for later work. **This repository currently contains the Phase 1 UI and integration probes, not the finished recommendation agent.**
+The project is being built in [four phases](./FOUR_PHASE_ROADMAP.md). The [architecture](./ARCHITECTURE.md) and [frontend design](./FRONTEND_DESIGN.md) set the constraints for later work. **The discovery foundation is working; Phase 2's recommendation engine is now the focus. Cart preparation remains unverified and is deferred to Phase 3.**
 
 The implemented frontend has a white hero with eight floating food illustrations, a black meal-brief section, and a white results area. A signed-in local Swiggy search can show real menu-item cards there. Without a live connection, the results area displays an honest empty state; full goal-aware ranking is Phase 2 work.
 
@@ -35,7 +35,7 @@ The Gemma probe uses the Ollama generate API by default. Set `GEMMA_API_URL` and
 
 The local page has a **Check the real menu** area. Connecting Swiggy starts its documented OAuth 2.1/PKCE browser flow, which requires the account holder's phone/OTP. After connection, choose a saved address and search a dish. The API returns only a small menu summary: name, restaurant, menu price, stock, and IDs. It does not claim the item meets macro or final-budget goals.
 
-For a plain item without required customizations, **Test cart** asks for explicit confirmation, rechecks the item within its restaurant, refuses to overwrite a nonempty cart, calls `update_food_cart`, then immediately reads `get_food_cart`. It only reports success when the selected item and payable total are present in the read-back. No checkout or order tool is exposed. The local SDK can expose the current `update_food_cart` input schema at `/api/swiggy/cart-tool-schema` for debugging because Swiggy's recipe and reference examples use different cart payload shapes.
+The experimental cart-probe endpoint asks for explicit confirmation, rechecks the item within its restaurant, refuses to overwrite a nonempty cart, and requires a read-back before claiming success. The account holder reports that the first cart test did not work, so the visible cart button is hidden while we build the search engine. We will diagnose the exact failure in Phase 3. No checkout or order tool is exposed. The local SDK can expose the current `update_food_cart` input schema at `/api/swiggy/cart-tool-schema` for debugging because Swiggy's recipe and reference examples use different cart payload shapes.
 
 Swiggy OAuth is deliberately limited to localhost in Phase 1. Sessions and tokens are held in server memory and vanish on restart. Before a public multiuser release, move these into per-user encrypted storage, add proper session management, and complete Swiggy's production-access review. See the [Swiggy developer quickstart](https://mcp.swiggy.com/builders/docs/start/developer/) and [authentication guide](https://mcp.swiggy.com/builders/docs/start/authenticate/).
 
@@ -51,9 +51,9 @@ Swiggy OAuth is deliberately limited to localhost in Phase 1. Sessions and token
 | `GEMMA_MODEL` | Model to probe, default `gemma3:4b`. |
 | `GEMMA_API_KEY` | Optional bearer token for a hosted compatible endpoint. |
 
-The Atlas initializer creates indexes for `meal_jobs`, `candidates`, `nutrition_claims`, `cart_audits`, and `preferences`. The Phase 1 UI does not persist personal briefs yet. Server credentials never enter the browser bundle. The `render.yaml` provides a Singapore-region free web-service blueprint. Once the repository is hosted and linked to Render, it can deploy without Atlas; add `MONGODB_URI` as a Render secret when the Atlas cluster exists. Render supplies its own public origin. Swiggy OAuth remains disabled on Render in Phase 1. No hosted service is claimed until it is actually deployed and tested.
+The Atlas initializer creates indexes for `meal_jobs`, `candidates`, `nutrition_claims`, `cart_audits`, and `preferences`. The Phase 1 UI does not persist personal briefs yet. Server credentials never enter the browser bundle. The `render.yaml` provides a Singapore-region free web-service blueprint. Add `MONGODB_URI` as a Render secret when the Atlas cluster exists. Render supplies its own public origin. Swiggy OAuth remains disabled on Render until public access and per-user session storage are ready.
 
-To deploy after pushing this repository to GitHub: in the Render dashboard choose **New → Blueprint**, select the repository, and review the single `cravecode` free web service from `render.yaml`. Approve the Blueprint and wait for its deploy to finish. Then open the assigned `onrender.com` URL and check `/api/health`. If Render asks to access a private repository, authorize that repository in your GitHub account. The free service can sleep when idle, so allow time for its first request to wake it.
+The live preview is [cravecode.onrender.com](https://cravecode.onrender.com/). Its page, images, health endpoint, and synthetic brief submission were verified. It currently has no configured Atlas or hosted Gemma connection and cannot perform public Swiggy OAuth. The free service can sleep when idle, so allow time for its first request to wake it.
 
 ## What is real now
 
@@ -62,6 +62,6 @@ To deploy after pushing this repository to GitHub: in the Render dashboard choos
 - Typed meal, candidate, evidence, and cart-audit contracts.
 - Node API serving the built frontend, validating briefs, and providing local Swiggy OAuth/menu/cart integration paths.
 - Optional Atlas connection and indexes, plus a local Gemma structured-output probe.
-- The frontend is prepared to render real menu-item cards after a successful local Swiggy connection and search; authenticated read-back remains unverified. No invented nutrition values or all-in price claims.
+- Authenticated local Swiggy address selection and menu search were observed with 10 real item cards. Cart read-back remains unverified. No invented nutrition values or all-in price claims.
 
 See [PHASE1_STATUS.md](./PHASE1_STATUS.md) for the checks completed in this workspace and the external gates still open.

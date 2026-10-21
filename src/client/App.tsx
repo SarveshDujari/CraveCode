@@ -97,9 +97,8 @@ function FieldHint({ children }: { children: React.ReactNode }) {
   return <span className="field-hint">{children}</span>;
 }
 
-function MenuCard({ item, busy, onCartProbe }: { item: PreviewMenuItem; busy: boolean; onCartProbe: (item: PreviewMenuItem) => void }) {
+function MenuCard({ item }: { item: PreviewMenuItem }) {
   const imageUrl = item.imageUrl?.startsWith("https://") ? item.imageUrl : null;
-  const canProbe = item.inStock !== false && !item.hasCustomizations;
 
   return <article className="menu-card">
     <div className="menu-card-image">
@@ -112,7 +111,6 @@ function MenuCard({ item, busy, onCartProbe }: { item: PreviewMenuItem; busy: bo
       <p className="restaurant-name">{item.restaurantName}</p>
       <div className="menu-card-facts"><div><small>MENU PRICE</small><strong>{item.priceInr === null ? "Unavailable" : `₹${item.priceInr}`}</strong><span>Before delivery and fees</span></div><div><small>NUTRITION</small><strong>Unknown</strong><span>Not a macro match yet</span></div></div>
       <details className="menu-card-details"><summary>What we know <span aria-hidden="true">+</span></summary><p>This item came from the live Swiggy menu. Protein, calories, final payable total, and fit to your goal have not been verified.</p></details>
-      <button className="card-action" type="button" disabled={busy || !canProbe} onClick={() => onCartProbe(item)}>{canProbe ? "Test cart add" : item.hasCustomizations ? "Customizations required" : "Unavailable"} <ArrowIcon /></button>
     </div>
   </article>;
 }
@@ -132,7 +130,6 @@ export function App() {
   const [submittedBrief, setSubmittedBrief] = useState<MealBrief | null>(null);
   const [searchStatus, setSearchStatus] = useState<SearchStatus>("idle");
   const [liveItems, setLiveItems] = useState<PreviewMenuItem[] | null>(null);
-  const [cartResult, setCartResult] = useState<Record<string, unknown> | null>(null);
   const [formMessage, setFormMessage] = useState("");
   const [resultMessage, setResultMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -173,7 +170,6 @@ export function App() {
     setFormMessage("");
     setResultMessage("");
     setLiveItems(null);
-    setCartResult(null);
     setSearchStatus("validating");
     try {
       await readApi("/api/briefs/validate", {
@@ -203,27 +199,6 @@ export function App() {
       setSearchStatus("error");
       setResultMessage(error instanceof Error ? error.message : "Could not search the menu.");
       showResults();
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function cartProbe(item: PreviewMenuItem) {
-    if (!selectedAddress) return;
-    const confirmed = window.confirm(`Add one ${item.name} to your Swiggy cart for an integration check? This changes your cart, but does not place an order.`);
-    if (!confirmed) return;
-    setBusy(true);
-    setResultMessage("");
-    try {
-      const result = await readApi<Record<string, unknown>>("/api/swiggy/cart-probe", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ addressId: selectedAddress, menuItemId: item.menuItemId, confirmed: true })
-      });
-      setCartResult(result);
-      setResultMessage(result.status === "verified" ? "The selected item and payable total were read back from your Swiggy cart." : "The cart needs review; no success is claimed.");
-    } catch (error) {
-      setResultMessage(error instanceof Error ? error.message : "Cart check failed.");
     } finally {
       setBusy(false);
     }
@@ -280,10 +255,9 @@ export function App() {
           {resultMessage && <p className={`result-message ${searchStatus === "error" ? "result-message-error" : ""}`} role="status">{resultMessage}</p>}
 
           {isLoading && <div className="results-grid" aria-label="Loading menu results"><div className="skeleton-card" /><div className="skeleton-card" /><div className="skeleton-card" /></div>}
-          {searchStatus === "live" && liveItems && liveItems.length > 0 && <><div className="live-results-label"><span className="live-dot" /> {liveItems.length} LIVE MENU ITEMS <span>Menu price only · nutrition not verified</span></div><div className="results-grid">{liveItems.slice(0, 12).map(item => <MenuCard key={`${item.restaurantId}:${item.menuItemId}`} item={item} busy={busy} onCartProbe={cartProbe} />)}</div></>}
+          {searchStatus === "live" && liveItems && liveItems.length > 0 && <><div className="live-results-label"><span className="live-dot" /> {liveItems.length} LIVE MENU ITEMS <span>Menu price only · nutrition not verified</span></div><div className="results-grid">{liveItems.slice(0, 12).map(item => <MenuCard key={`${item.restaurantId}:${item.menuItemId}`} item={item} />)}</div></>}
           {searchStatus === "live" && liveItems?.length === 0 && <div className="results-empty"><span className="empty-symbol" aria-hidden="true">✳</span><h3>No dishes found this time.</h3><p>Try another dish name or change the selected address, then search again.</p><a className="text-link" href="#meal-brief">Edit your brief <ArrowIcon /></a></div>}
           {(searchStatus === "idle" || searchStatus === "preview" || searchStatus === "error") && <div className="results-empty"><span className="empty-symbol" aria-hidden="true">✳</span><h3>{searchStatus === "idle" ? "Your next good find starts above." : searchStatus === "error" ? "We couldn’t fetch that menu." : "Your brief is ready."}</h3><p>{searchStatus === "idle" ? "Set a goal, a budget, and something you’re in the mood for. Your choices will appear here." : searchStatus === "error" ? "Your choices are saved in the form. Check the message above and try again." : "Live menu items appear here after you connect Swiggy and choose an address. Full goal-aware ranking comes in the next phase."}</p><a className="text-link" href="#meal-brief">{searchStatus === "idle" ? "Build my meal" : "Back to my brief"} <ArrowIcon /></a></div>}
-          {cartResult && <div className="cart-audit"><span>LOCAL CART CHECK</span><strong>{cartResult.status === "verified" ? "Cart read-back verified" : "Cart needs review"}</strong><p>Final payable: {typeof (cartResult.cart as Record<string, unknown> | undefined)?.toPayInr === "number" ? `₹${(cartResult.cart as Record<string, unknown>).toPayInr}` : "Unavailable"}. No order was placed.</p></div>}
           <div className="results-footnote"><span aria-hidden="true">✳</span><p>CraveCode never places an order for you. A menu price is not the final total, and an unknown macro is never called a match.</p></div>
         </div>
       </section>

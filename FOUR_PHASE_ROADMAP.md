@@ -1,6 +1,8 @@
-# MealPilot: four-phase build plan
+# CraveCode: four-phase build plan
 
 This roadmap turns the [system architecture](./ARCHITECTURE.md) and [frontend design](./FRONTEND_DESIGN.md) into four reviewable milestones for the Hacktoberfest Week 3 build. The [challenge rules](https://dev.to/page/hacktoberfest-week3-2026-10-19-contest-rules) govern the actual submission deadline.
+
+**Current execution decision:** The deployed shell and authenticated local Swiggy menu search establish the discovery foundation. The first cart test did not work; its exact failure has not been diagnosed. Cart preparation is deferred to Phase 3 so Phase 2 can prioritize finding, verifying, and ranking useful meals. This does not count as a passed cart integration gate.
 
 ## Scope we protect throughout
 
@@ -10,27 +12,27 @@ The first release handles one selected Swiggy delivery address, one restaurant p
 
 | Phase | Working result | Exit gate |
 | --- | --- | --- |
-| 1. Prove the path | Running app shell and a verified Swiggy staging/local search → cart → read-back spike | We know whether the essential ordering path and access are real. |
+| 1. Prove discovery | Running app shell, deployed preview, and authenticated local address → menu search | Real menu discovery works; cart read-back remains open for Phase 3. |
 | 2. Find and explain | User can submit a meal brief and see grounded, ranked candidates or a truthful no-match result | No unsupported nutrition or false budget promise in the sample cases. |
 | 3. Prepare safely | User can choose one candidate, review it, prepare the cart, and see the verified total; signature page motion is integrated | Cart success and failure paths are recoverable and observable. |
 | 4. Prove and submit | Polished deployed demo, reproducible evidence, short video, and DEV submission | Live link, code, article, tests, and partner-category evidence are all checked. |
 
 ## Phase 1 — Prove the path
 
-**Question to answer:** Can this project use real menu identifiers and prepare a real staging/local cart through the documented Swiggy Food MCP flow?
+**Question to answer:** Can this project authenticate locally, find real available menu items with stable identifiers, and deploy a working app shell?
 
 Build:
 
-- Create the new repository and app shell: responsive landing page, static hero, meal form, result-card fixture, and cart-review fixture. Set up environment variables without exposing service credentials in the browser.
+- Create the new repository and app shell: responsive landing page, food-illustration hero, meal form, and live result cards. Set up environment variables without exposing service credentials in the browser.
 - Establish the typed request and candidate contracts, the backend API boundary, and the initial MongoDB Atlas collections for jobs, preferences, candidates, evidence, and cart audits.
-- Authenticate the available Swiggy staging/local environment. Select an address, search a menu, capture an exact menu item and variant ID, add a chosen item to the staging cart, and read the cart back. Log only redacted evidence of what succeeded.
+- Authenticate the available Swiggy local environment. Select an address, search a menu, and capture exact menu and restaurant IDs. Log only redacted evidence of what succeeded. Defer cart mutation and read-back to Phase 3.
 - Inspect actual responses for nutrition, availability, fee, and price fields. Record gaps; do not design around imagined fields.
 - Get Gemma inference reachable and run three representative constraint-parsing probes. Set up Entire at the start so decisions and fixes can be captured as they happen.
 - Deploy the basic app/API shell to Render early, even if the data is still a labeled fixture, to expose deployment issues now.
 
 **Deliverable:** A click-through UI skeleton plus a short integration note containing the actual Swiggy operations that worked, sample redacted response shapes, and known blockers.
 
-**Exit gate:** A selected staging/local menu item can be written and read back from the cart. If access is blocked, apply/escalate immediately and keep a clearly labeled replay path for the demo; do not imply that replay is live. The rest of the build can continue, but production-cart claims remain blocked until verified.
+**Exit gate:** A signed-in local user can select a saved address and see live menu items, and the deployed preview serves the UI and accepts a meal brief. This gate is met. Cart preparation remains unverified and cannot be claimed as working until Phase 3 proves a write and read-back.
 
 ## Phase 2 — Find and explain
 
@@ -55,6 +57,7 @@ Build:
 
 Build:
 
+- Diagnose the earlier cart-test failure, inspect the live tool input schema and redacted response shapes, and repeat the cart spike with an empty cart before presenting a preparation control to users.
 - Add explicit candidate selection, a review panel, and a separate **Prepare cart** action. Read the existing cart before writing; if replacement is needed, show contents and require an explicit replace action.
 - Revalidate item/variant and stock before mutation. Serialize cart operations per user, use app-level idempotency keys and job versions, and read the live cart after a write or uncertain timeout. Show success only after contents and `to_pay` are verified.
 - If the final total exceeds the budget, show the difference and return to alternatives. If stock, variants, or cart state change, stop and explain; do not retry an uncertain mutation blindly.
