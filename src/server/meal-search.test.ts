@@ -40,14 +40,27 @@ test("egg-friendly and explicit exclusions reject unsuitable dishes", async () =
 });
 
 test("public results are labeled as leads with no fabricated price or availability", async () => {
-  const result = await searchWithWeb({ ...brief, city: "Bengaluru" }, async () => [
+  const queries: string[] = [];
+  const result = await searchWithWeb({ ...brief, city: "Bengaluru" }, async query => {
+    queries.push(query);
+    return [
     { title: "Paneer bowls nearby", url: "https://www.swiggy.com/city/bangalore/paneer-bowls", snippet: "Order paneer bowls", imageUrl: null }
-  ]);
+    ];
+  });
   assert.equal(result.source, "web-leads");
+  assert.ok(queries.every(query => query.includes("site:swiggy.com/city/bangalore")));
   assert.equal(result.results.length, 1);
   assert.equal(result.results[0].menuPriceInr, null);
   assert.equal(result.results[0].availability, "unknown");
   assert.equal(result.results[0].sourceUrl, "https://www.swiggy.com/city/bangalore/paneer-bowls");
+});
+
+test("public restaurant pages can match a dish named in the snippet without admitting generic category pages", async () => {
+  const result = await searchWithWeb({ ...brief, city: "Bengaluru", dish: "paneer tikka" }, async () => [
+    { title: "Order from Sukh Sagar", url: "https://www.swiggy.com/city/bangalore/sukh-sagar-rest30458", snippet: "Paneer tikka on the menu", imageUrl: null },
+    { title: "Best Paneer Tikka Delivery Restaurants", url: "https://www.swiggy.com/city/bangalore/paneer-tikka-dish-restaurants", snippet: "50 dishes", imageUrl: null }
+  ]);
+  assert.deepEqual(result.results.map(value => value.title), ["Order from Sukh Sagar"]);
 });
 
 test("Mastra workflow returns an evidence-labeled candidate", async () => {

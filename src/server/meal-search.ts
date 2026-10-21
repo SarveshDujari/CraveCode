@@ -162,11 +162,16 @@ function cityFitsPage(url: string, city: string): boolean {
   return aliases.has(cityInPath);
 }
 
+function swiggyCitySlug(city: string): string {
+  const slug = city.toLowerCase().trim().replace(/\s+/g, "-");
+  return ({ bengaluru: "bangalore", bombay: "mumbai", calcutta: "kolkata", madras: "chennai" } as Record<string, string>)[slug] || slug;
+}
+
 export async function searchWithWeb(brief: MealBrief, searchWeb: WebSearch, plannedQueries = planQueries(brief)): Promise<MealSearchResponse> {
   const queries = plannedQueries.slice(0, 3);
   const city = brief.city.trim();
   if (!city) throw new Error("Enter a city to explore public web results.");
-  const webQueries = queries.map(query => `${query} ${city} order online (site:swiggy.com OR site:zomato.com OR site:magicpin.in)`);
+  const webQueries = queries.map(query => `${query} ${city} order online site:swiggy.com/city/${swiggyCitySlug(city)}`);
   const settled = await Promise.allSettled(webQueries.map(searchWeb));
   const warnings = settled.flatMap((result, index) => result.status === "rejected" ? [`Web search for “${queries[index]}” failed.`] : []);
   const seen = new Set<string>();
@@ -181,13 +186,15 @@ export async function searchWithWeb(brief: MealBrief, searchWeb: WebSearch, plan
       const dishQuery = brief.cuisine && queries[index].toLowerCase().startsWith(brief.cuisine.toLowerCase())
         ? queries[index].slice(brief.cuisine.length).trim() : queries[index];
       const queryWords = tokens(dishQuery);
-      const pageWords = tokens(`${lead.title} ${new URL(lead.url).pathname}`);
+      const pageWords = tokens(`${lead.title} ${lead.snippet} ${new URL(lead.url).pathname}`);
       if (queryWords[0] && !pageWords.includes(queryWords[0])) continue;
       const matchCount = queryWords.filter(word => pageWords.includes(word)).length;
       if (matchCount === 0) continue;
       seen.add(lead.url);
       const title = lead.title.trim();
       if (!title || /recipe|homemade|how to make/i.test(`${title} ${lead.snippet}`)) continue;
+      if (/^(because you searched|how can i order|best .* delivery restaurants)/i.test(title)) continue;
+      if (/-dish-restaurants\/?$/i.test(new URL(lead.url).pathname)) continue;
       if (brief.diet !== "any" && /\b(chicken|mutton|meat|fish|prawn|beef|pork)\b/i.test(`${title} ${lead.snippet}`)) continue;
       if (brief.diet === "vegetarian" && /\begg\b/i.test(`${title} ${lead.snippet}`)) continue;
       if (exclusions(brief.wish).some(term => `${title} ${lead.snippet}`.toLowerCase().includes(term))) continue;
