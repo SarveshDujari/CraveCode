@@ -1,12 +1,14 @@
-# MealPilot
+# CraveCode
 
-MealPilot is a meal-discovery agent in progress. Give it a budget, diet, protein and calorie targets, and optional food preferences; it will search orderable meals, explain evidence and tradeoffs, and prepare a selected Swiggy cart for review. It never places an order automatically.
+CraveCode is a meal-discovery agent in progress. Give it a budget, diet, protein and calorie targets, and optional food preferences; the planned agent will search orderable meals, explain evidence and tradeoffs, and prepare a selected Swiggy cart for review. It never places an order automatically.
 
-The project is being built in [four phases](./FOUR_PHASE_ROADMAP.md). The [architecture](./ARCHITECTURE.md) and [frontend design](./FRONTEND_DESIGN.md) set the constraints for later work. **This repository currently contains the Phase 1 shell and integration probes, not the finished recommendation agent.** Example result cards are explicitly marked as design previews.
+The project is being built in [four phases](./FOUR_PHASE_ROADMAP.md). The [architecture](./ARCHITECTURE.md) and [frontend design](./FRONTEND_DESIGN.md) set the constraints for later work. **This repository currently contains the Phase 1 UI and integration probes, not the finished recommendation agent.**
 
-The next frontend iteration is planned as **CraveCode**: a white hero with eight floating food illustrations, a black meal-brief section, and white fetched-result cards. The screenshot below shows the existing Phase 1 shell, before that redesign.
+The implemented frontend has a white hero with eight floating food illustrations, a black meal-brief section, and a white results area. A signed-in local Swiggy search can show real menu-item cards there. Without a live connection, the results area displays an honest empty state; full goal-aware ranking is Phase 2 work.
 
-![Phase 1 MealPilot homepage](./docs/phase1-hero.png)
+![CraveCode desktop hero](./docs/cravecode-hero.png)
+
+[Mobile hero](./docs/cravecode-mobile.png) · [Dark meal brief](./docs/cravecode-brief.png)
 
 ## Run locally
 
@@ -51,15 +53,15 @@ Swiggy OAuth is deliberately limited to localhost in Phase 1. Sessions and token
 
 The Atlas initializer creates indexes for `meal_jobs`, `candidates`, `nutrition_claims`, `cart_audits`, and `preferences`. The Phase 1 UI does not persist personal briefs yet. Server credentials never enter the browser bundle. The `render.yaml` provides a Singapore-region free web-service blueprint. Once the repository is hosted and linked to Render, it can deploy without Atlas; add `MONGODB_URI` as a Render secret when the Atlas cluster exists. Render supplies its own public origin. Swiggy OAuth remains disabled on Render in Phase 1. No hosted service is claimed until it is actually deployed and tested.
 
-To deploy after pushing this repository to GitHub: in the Render dashboard choose **New → Blueprint**, select the repository, and review the single `mealpilot` free web service from `render.yaml`. Approve the Blueprint and wait for its deploy to finish. Then open the assigned `onrender.com` URL and check `/api/health`. If Render asks to access a private repository, authorize that repository in your GitHub account. The free service can sleep when idle, so allow time for its first request to wake it.
+To deploy after pushing this repository to GitHub: in the Render dashboard choose **New → Blueprint**, select the repository, and review the single `cravecode` free web service from `render.yaml`. Approve the Blueprint and wait for its deploy to finish. Then open the assigned `onrender.com` URL and check `/api/health`. If Render asks to access a private repository, authorize that repository in your GitHub account. The free service can sleep when idle, so allow time for its first request to wake it.
 
 ## What is real now
 
-- Responsive landing page and meal form with accessible single-select diet/goal controls, numeric units, and validation.
-- Original generated hero photograph stored in `public/hero-food.png`.
+- Responsive three-scene CraveCode frontend with all eight user-supplied illustrations floating around the wordmark, a dark meal form, and a white results area.
+- Accessible single-select diet/goal controls, numeric units, validation, reduced-motion support, and an honest disconnected-results state.
 - Typed meal, candidate, evidence, and cart-audit contracts.
 - Node API serving the built frontend, validating briefs, and providing local Swiggy OAuth/menu/cart integration paths.
 - Optional Atlas connection and indexes, plus a local Gemma structured-output probe.
-- Clearly labeled preview cards; no invented nutrition values or all-in price claims.
+- The frontend is prepared to render real menu-item cards after a successful local Swiggy connection and search; authenticated read-back remains unverified. No invented nutrition values or all-in price claims.
 
 See [PHASE1_STATUS.md](./PHASE1_STATUS.md) for the checks completed in this workspace and the external gates still open.

@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { mealBriefSchema, type MealBrief, type PreviewMenuItem } from "../shared/contracts.ts";
 
 type SystemStatus = {
@@ -9,6 +9,7 @@ type SystemStatus = {
 };
 
 type Address = { id: string; label: string };
+type SearchStatus = "idle" | "validating" | "searching" | "live" | "preview" | "error";
 
 const initialBrief: MealBrief = {
   mealSlot: "dinner",
@@ -22,11 +23,16 @@ const initialBrief: MealBrief = {
   wish: ""
 };
 
-const preview = [
-  { number: "01", name: "Paneer grain bowl", category: "A little hearty", position: "51% 13%" },
-  { number: "02", name: "Dal & rice bowl", category: "Comfort, sorted", position: "92% 12%" },
-  { number: "03", name: "Chicken tikka bowl", category: "Protein forward", position: "65% 85%" }
-];
+const foods = [
+  { name: "biryani", width: 552, height: 661 },
+  { name: "pizza", width: 725, height: 725 },
+  { name: "tikka", width: 631, height: 630 },
+  { name: "burger", width: 602, height: 617 },
+  { name: "wrap", width: 741, height: 715 },
+  { name: "sandwich", width: 732, height: 732 },
+  { name: "dosa", width: 719, height: 719 },
+  { name: "salad", width: 654, height: 630 }
+] as const;
 
 async function readApi<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(path, { credentials: "same-origin", ...options });
@@ -35,16 +41,86 @@ async function readApi<T>(path: string, options?: RequestInit): Promise<T> {
   return payload;
 }
 
-function ArrowIcon() {
-  return <span aria-hidden="true">↗</span>;
+function ArrowIcon({ down = false }: { down?: boolean }) {
+  return <span aria-hidden="true">{down ? "↓" : "↗"}</span>;
 }
 
 function Logo() {
-  return <a className="brand" href="#top" aria-label="MealPilot home"><span className="brand-mark">m.</span><span>mealpilot</span></a>;
+  return <a className="brand" href="#top" aria-label="CraveCode home"><span className="brand-glyph" aria-hidden="true">✳</span>CraveCode<span className="brand-period">.</span></a>;
+}
+
+function OrbitHero() {
+  const heroRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const hero = heroRef.current;
+    if (!hero) return;
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const rect = hero.getBoundingClientRect();
+      const progress = Math.max(0, Math.min(1, -rect.top / Math.max(rect.height * 0.75, 1)));
+      hero.style.setProperty("--hero-shift", `${-48 * progress}px`);
+      hero.style.setProperty("--hero-scale", String(1 - 0.16 * progress));
+      hero.style.setProperty("--hero-opacity", String(1 - 0.88 * progress));
+    };
+    const queue = () => { if (!frame) frame = requestAnimationFrame(update); };
+    update();
+    window.addEventListener("scroll", queue, { passive: true });
+    window.addEventListener("resize", queue);
+    return () => {
+      window.removeEventListener("scroll", queue);
+      window.removeEventListener("resize", queue);
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, []);
+
+  return <section ref={heroRef} className="hero" aria-labelledby="hero-title">
+    <div className="hero-orbit" aria-hidden="true">
+      {foods.map(food => <div className={`orbit-item orbit-${food.name}`} key={food.name}>
+        <img src={`/food/${food.name}_animated.png`} width={food.width} height={food.height} alt="" fetchPriority="high" />
+      </div>)}
+    </div>
+    <div className="hero-content">
+      <p className="hero-eyebrow"><span className="eyebrow-line" /> FOOD THAT GETS YOU</p>
+      <h1 id="hero-title">Crave<span>Code</span></h1>
+      <p className="hero-headline">Find food that fits your cravings, goals, and budget.</p>
+      <p className="hero-description">Tell us what you’re after. Explore real menu choices, see what’s known, and decide what belongs in your cart.</p>
+      <a className="button button-primary" href="#meal-brief">Find my meal <ArrowIcon down /></a>
+      <span className="hero-caption">EARLY PREVIEW · YOU STAY IN CONTROL</span>
+    </div>
+    <div className="hero-bottom container" aria-hidden="true"><span>01 / 03</span><span>SCROLL TO EXPLORE <span className="scroll-arrow">↓</span></span></div>
+  </section>;
 }
 
 function FieldHint({ children }: { children: React.ReactNode }) {
   return <span className="field-hint">{children}</span>;
+}
+
+function MenuCard({ item, busy, onCartProbe }: { item: PreviewMenuItem; busy: boolean; onCartProbe: (item: PreviewMenuItem) => void }) {
+  const imageUrl = item.imageUrl?.startsWith("https://") ? item.imageUrl : null;
+  const canProbe = item.inStock !== false && !item.hasCustomizations;
+
+  return <article className="menu-card">
+    <div className="menu-card-image">
+      {imageUrl ? <img src={imageUrl} alt={item.name} loading="lazy" /> : <div className="image-placeholder"><span aria-hidden="true">✳</span><small>PHOTO NOT SUPPLIED</small></div>}
+      <span className="menu-card-image-tag">LIVE MENU ITEM</span>
+    </div>
+    <div className="menu-card-body">
+      <div className="menu-card-top"><span>{item.isVeg === true ? "VEGETARIAN" : item.isVeg === false ? "NON-VEGETARIAN" : "DIET UNCONFIRMED"}</span><span>{item.inStock === false ? "UNAVAILABLE" : item.inStock === true ? "AVAILABLE" : "STOCK UNCONFIRMED"}</span></div>
+      <h3>{item.name}</h3>
+      <p className="restaurant-name">{item.restaurantName}</p>
+      <div className="menu-card-facts"><div><small>MENU PRICE</small><strong>{item.priceInr === null ? "Unavailable" : `₹${item.priceInr}`}</strong><span>Before delivery and fees</span></div><div><small>NUTRITION</small><strong>Unknown</strong><span>Not a macro match yet</span></div></div>
+      <details className="menu-card-details"><summary>What we know <span aria-hidden="true">+</span></summary><p>This item came from the live Swiggy menu. Protein, calories, final payable total, and fit to your goal have not been verified.</p></details>
+      <button className="card-action" type="button" disabled={busy || !canProbe} onClick={() => onCartProbe(item)}>{canProbe ? "Test cart add" : item.hasCustomizations ? "Customizations required" : "Unavailable"} <ArrowIcon /></button>
+    </div>
+  </article>;
+}
+
+function resultSummary(brief: MealBrief): string {
+  const diet = brief.diet === "any" ? "Any diet" : brief.diet === "egg-friendly" ? "Egg-friendly" : "Vegetarian";
+  const meal = brief.mealSlot.charAt(0).toUpperCase() + brief.mealSlot.slice(1);
+  return `${diet} ${meal.toLowerCase()} · ${brief.minProteinG}g+ protein · up to ${brief.maxCaloriesKcal} kcal · ₹${brief.budgetInr} total budget`;
 }
 
 export function App() {
@@ -53,16 +129,16 @@ export function App() {
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [selectedAddress, setSelectedAddress] = useState("");
   const [dishQuery, setDishQuery] = useState("paneer");
+  const [submittedBrief, setSubmittedBrief] = useState<MealBrief | null>(null);
+  const [searchStatus, setSearchStatus] = useState<SearchStatus>("idle");
   const [liveItems, setLiveItems] = useState<PreviewMenuItem[] | null>(null);
   const [cartResult, setCartResult] = useState<Record<string, unknown> | null>(null);
-  const [message, setMessage] = useState("");
-  const [labMessage, setLabMessage] = useState("");
+  const [formMessage, setFormMessage] = useState("");
+  const [resultMessage, setResultMessage] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    void readApi<SystemStatus>("/api/system")
-      .then(status => setSystem(status))
-      .catch(() => setSystem(null));
+    void readApi<SystemStatus>("/api/system").then(setSystem).catch(() => setSystem(null));
   }, []);
 
   useEffect(() => {
@@ -72,57 +148,61 @@ export function App() {
         setAddresses(result.addresses);
         if (result.addresses.length === 1) setSelectedAddress(result.addresses[0].id);
       })
-      .catch(error => setLabMessage(error instanceof Error ? error.message : "Could not load addresses."));
+      .catch(error => setFormMessage(error instanceof Error ? error.message : "Could not load addresses."));
   }, [system?.swiggy]);
 
   const set = <K extends keyof MealBrief>(key: K, value: MealBrief[K]) => {
     setBrief(current => ({ ...current, [key]: value }));
-    setMessage("");
+    setFormMessage("");
   };
+
+  function showResults() {
+    requestAnimationFrame(() => document.getElementById("results")?.scrollIntoView({
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth"
+    }));
+  }
 
   async function submitBrief(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const checked = mealBriefSchema.safeParse({ ...brief, addressId: selectedAddress || undefined });
     if (!checked.success) {
-      setMessage("Please check the budget, protein, and calorie values.");
+      setFormMessage("Check the budget, protein, and calorie values before searching.");
       return;
     }
     setBusy(true);
+    setFormMessage("");
+    setResultMessage("");
+    setLiveItems(null);
+    setCartResult(null);
+    setSearchStatus("validating");
     try {
       await readApi("/api/briefs/validate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(checked.data)
       });
-      setMessage("Your meal brief is ready. The live recommendation workflow is the next build phase; the cards below are a design preview.");
-      document.getElementById("results")?.scrollIntoView({ behavior: "smooth" });
+      setSubmittedBrief(checked.data);
+      showResults();
+      if (system?.swiggy === "connected" && selectedAddress) {
+        if (!dishQuery.trim()) {
+          setSearchStatus("preview");
+          setResultMessage("Enter a dish to look up in the live menu.");
+          return;
+        }
+        setSearchStatus("searching");
+        const params = new URLSearchParams({ addressId: selectedAddress, query: dishQuery.trim(), veg: brief.diet === "vegetarian" ? "1" : "0" });
+        const result = await readApi<{ items: PreviewMenuItem[] }>(`/api/swiggy/menu?${params}`);
+        setLiveItems(result.items);
+        setSearchStatus("live");
+        setResultMessage(result.items.length ? "Live menu results. These are not ranked against your nutrition goals yet." : "No menu items came back for that dish and address. Try another dish name.");
+      } else {
+        setSearchStatus("preview");
+        setResultMessage("");
+      }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not validate the brief.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function searchLive(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!selectedAddress) {
-      setLabMessage("Choose a saved address first.");
-      return;
-    }
-    setBusy(true);
-    setLabMessage("");
-    setCartResult(null);
-    try {
-      const params = new URLSearchParams({
-        addressId: selectedAddress,
-        query: dishQuery,
-        veg: brief.diet === "vegetarian" ? "1" : "0"
-      });
-      const result = await readApi<{ items: PreviewMenuItem[] }>(`/api/swiggy/menu?${params}`);
-      setLiveItems(result.items);
-      if (result.items.length === 0) setLabMessage("No menu items came back for that dish and address. Try another dish name.");
-    } catch (error) {
-      setLabMessage(error instanceof Error ? error.message : "Menu search failed.");
+      setSearchStatus("error");
+      setResultMessage(error instanceof Error ? error.message : "Could not search the menu.");
+      showResults();
     } finally {
       setBusy(false);
     }
@@ -133,7 +213,7 @@ export function App() {
     const confirmed = window.confirm(`Add one ${item.name} to your Swiggy cart for an integration check? This changes your cart, but does not place an order.`);
     if (!confirmed) return;
     setBusy(true);
-    setLabMessage("");
+    setResultMessage("");
     try {
       const result = await readApi<Record<string, unknown>>("/api/swiggy/cart-probe", {
         method: "POST",
@@ -141,118 +221,74 @@ export function App() {
         body: JSON.stringify({ addressId: selectedAddress, menuItemId: item.menuItemId, confirmed: true })
       });
       setCartResult(result);
-      setLabMessage(result.status === "verified" ? "Cart contents and payable total were read back from Swiggy." : "The cart needs review; no success is claimed.");
+      setResultMessage(result.status === "verified" ? "The selected item and payable total were read back from your Swiggy cart." : "The cart needs review; no success is claimed.");
     } catch (error) {
-      setLabMessage(error instanceof Error ? error.message : "Cart check failed.");
+      setResultMessage(error instanceof Error ? error.message : "Cart check failed.");
     } finally {
       setBusy(false);
     }
   }
 
+  const isLoading = searchStatus === "validating" || searchStatus === "searching";
+
   return <div id="top" className="page-shell">
-    <header className="site-header container">
-      <Logo />
-      <nav aria-label="Main navigation">
-        <a href="#how-it-works">How it works</a>
-        <a href="#meal-brief">Build my meal</a>
-      </nav>
-      <a className="header-link" href="#meal-brief">Find my meal <ArrowIcon /></a>
-    </header>
+    <header className="site-header container"><Logo /><nav aria-label="Main navigation"><a href="#process">How it works</a><a href="#results">Explore meals</a></nav><a className="header-link" href="#meal-brief">Find my meal <ArrowIcon /></a></header>
 
     <main>
-      <section className="hero container" aria-labelledby="hero-title">
-        <div className="hero-copy">
-          <div className="eyebrow"><span className="eyebrow-dot" /> YOUR DAY, YOUR PLATE</div>
-          <h1 id="hero-title">Good food.<br /><em>Better fit.</em></h1>
-          <p>Give us your budget and goals. We’ll help you find food that fits the day you’re having.</p>
-          <a href="#meal-brief" className="button button-primary">Find my meal <ArrowIcon /></a>
-          <span className="hero-caption">For the meals you can actually order.</span>
-        </div>
-        <div className="hero-visual">
-          <img src="/hero-food.png" alt="Bowls of paneer, dal and rice, chicken tikka, and fresh salad" fetchPriority="high" />
-          <div className="hero-note"><span className="note-symbol">✳</span><span>made for<br /><strong>your goals</strong></span></div>
-        </div>
-      </section>
+      <OrbitHero />
 
-      <section className="ribbon-section" aria-label="Food inspiration">
-        <div className="ribbon-intro container"><span>THE POSSIBILITIES</span><span>Scroll to explore <span aria-hidden="true">→</span></span></div>
-        <div className="food-ribbon">
-          {preview.map(item => <div className="ribbon-tile" key={item.number}>
-            <span className="ribbon-number">{item.number}</span>
-            <span className="ribbon-photo" style={{ backgroundPosition: item.position }} aria-hidden="true" />
-            <span className="ribbon-name">{item.name}</span>
-          </div>)}
-          <div className="ribbon-message">A meal that makes sense<br /><em>for you.</em></div>
-        </div>
-      </section>
-
-      <section id="how-it-works" className="how-section container">
-        <div className="section-kicker">A BETTER WAY TO DECIDE</div>
-        <div className="how-heading"><h2>Less scrolling menus.<br /><em>More getting it right.</em></h2><p>One brief brings your tastes, targets, and budget together. You stay in control of what goes in the cart.</p></div>
-        <div className="steps-grid">
-          <article><span>01 / TELL US</span><h3>Your kind of meal</h3><p>Set a budget, a goal, and anything you want to avoid.</p></article>
-          <article><span>02 / COMPARE</span><h3>See the tradeoffs</h3><p>Browse choices with clear sources and honest uncertainty.</p></article>
-          <article><span>03 / CHOOSE</span><h3>Make it yours</h3><p>Review one choice before a cart is ever prepared.</p></article>
-        </div>
-      </section>
-
-      <section id="meal-brief" className="brief-section">
-        <div className="container brief-layout">
-          <div className="brief-aside">
-            <div className="section-kicker">YOUR MEAL BRIEF</div>
-            <h2>Let’s find<br /><em>your fit.</em></h2>
-            <p>A few details help narrow the menu. You can change them whenever you like.</p>
-            <div className="aside-line"><span>01</span><span>Tell us what matters today</span></div>
-            <div className="aside-line"><span>02</span><span>Explore the best possibilities</span></div>
-            <div className="aside-line"><span>03</span><span>Choose before we prep a cart</span></div>
+      <section id="meal-brief" className="brief-section" aria-labelledby="brief-title">
+        <div className="container">
+          <div className="section-topline section-topline-dark"><span>02 / 03</span><span>THE GOOD PART STARTS HERE</span></div>
+          <div className="brief-layout">
+            <div className="brief-aside"><p className="eyebrow">YOUR NEXT MEAL, YOUR RULES</p><h2 id="brief-title">What are you <em>craving?</em></h2><p className="brief-lede">Set the boundaries. Keep the joy. Tell us what sounds good and what needs to fit.</p><div className="brief-aside-note"><span aria-hidden="true">✳</span><p>A good pick should make sense for your appetite <em>and</em> your day.</p></div></div>
+            <form className="brief-form" onSubmit={submitBrief}>
+              <div className="form-section-label"><span>01</span> THE BASICS</div>
+              <div className="field-grid two-col">
+                <label className="field"><span>Meal</span><select value={brief.mealSlot} onChange={e => set("mealSlot", e.target.value as MealBrief["mealSlot"])}><option value="breakfast">Breakfast</option><option value="lunch">Lunch</option><option value="dinner">Dinner</option><option value="snack">Snack</option></select></label>
+                <label className="field"><span>Delivery address</span><select value={selectedAddress} onChange={e => setSelectedAddress(e.target.value)} disabled={addresses.length === 0}><option value="">{system?.swiggy === "connected" ? "Choose an address" : "Connect Swiggy to choose"}</option>{addresses.map(address => <option key={address.id} value={address.id}>{address.label}</option>)}</select></label>
+              </div>
+              {system?.swiggyLocalEnabled && system.swiggy !== "connected" && <a className="connect-inline" href="/api/swiggy/connect">Connect Swiggy for live menu search <ArrowIcon /></a>}
+              <div className="form-section-label"><span>02</span> YOUR PREFERENCES</div>
+              <fieldset className="field radio-field"><legend>How do you eat?</legend><div className="pill-group">{([ ["vegetarian", "Vegetarian"], ["egg-friendly", "Egg-friendly"], ["any", "Anything"] ] as const).map(([value,label]) => <label className="choice-pill" key={value}><input type="radio" name="diet" value={value} checked={brief.diet === value} onChange={() => set("diet", value)} /><span>{label}</span></label>)}</div></fieldset>
+              <fieldset className="field radio-field"><legend>What’s the goal?</legend><div className="pill-group">{([ ["high-protein", "High protein"], ["balanced", "Balanced"], ["lighter", "Something lighter"] ] as const).map(([value,label]) => <label className="choice-pill" key={value}><input type="radio" name="goal" value={value} checked={brief.goal === value} onChange={() => set("goal", value)} /><span>{label}</span></label>)}</div></fieldset>
+              <div className="form-section-label"><span>03</span> THE NUMBERS</div>
+              <div className="field-grid three-col">
+                <label className="field"><span>Protein, at least</span><div className="number-input"><input type="number" min="0" max="200" step="1" value={brief.minProteinG} onChange={e => set("minProteinG", Number(e.target.value))} /><span>g</span></div></label>
+                <label className="field"><span>Calories, at most</span><div className="number-input"><input type="number" min="100" max="3000" step="10" value={brief.maxCaloriesKcal} onChange={e => set("maxCaloriesKcal", Number(e.target.value))} /><span>kcal</span></div></label>
+                <label className="field"><span>Total budget</span><div className="number-input budget"><span>₹</span><input type="number" min="50" max="10000" step="10" value={brief.budgetInr} onChange={e => set("budgetInr", Number(e.target.value))} /></div><FieldHint>Including delivery and fees</FieldHint></label>
+              </div>
+              <div className="field-grid two-col taste-fields">
+                <label className="field"><span>Cuisine, if you have one in mind</span><input type="text" maxLength={80} value={brief.cuisine} onChange={e => set("cuisine", e.target.value)} placeholder="Anything sounds good" /></label>
+                <label className="field"><span>Anything else?</span><input type="text" maxLength={280} value={brief.wish} onChange={e => set("wish", e.target.value)} placeholder="Spicy, no mushrooms..." /></label>
+              </div>
+              {system?.swiggyLocalEnabled && <label className="field live-query"><span>Dish to look up on the live menu</span><input type="text" maxLength={80} value={dishQuery} onChange={e => setDishQuery(e.target.value)} placeholder="e.g. paneer tikka" /><FieldHint>Local integration check only; this does not rank meals against your goals yet.</FieldHint></label>}
+              <label className="check-row"><input type="checkbox" checked={brief.strictNutrition} onChange={e => set("strictNutrition", e.target.checked)} /><span>Only call it an exact match when nutrition is documented</span></label>
+              <div className="form-footer"><p>Prices and nutrition are labeled by what we can verify.</p><button className="button button-light" disabled={busy} type="submit">{busy ? "Searching…" : "Find food that fits"} <ArrowIcon /></button></div>
+              {formMessage && <p className="form-message" role="status">{formMessage}</p>}
+            </form>
           </div>
-          <form className="brief-card" onSubmit={submitBrief}>
-            <div className="card-top"><span>THE ESSENTIALS</span><span>~ 30 seconds</span></div>
-            <div className="field-grid two-col">
-              <label className="field"><span>Meal</span><select value={brief.mealSlot} onChange={e => set("mealSlot", e.target.value as MealBrief["mealSlot"])}><option value="breakfast">Breakfast</option><option value="lunch">Lunch</option><option value="dinner">Dinner</option><option value="snack">Snack</option></select></label>
-              <label className="field"><span>Delivery address</span><select value={selectedAddress} onChange={e => setSelectedAddress(e.target.value)} disabled={addresses.length === 0}><option value="">{system?.swiggy === "connected" ? "Choose an address" : "Connect Swiggy to choose"}</option>{addresses.map(address => <option key={address.id} value={address.id}>{address.label}</option>)}</select></label>
-            </div>
-            {system?.swiggyLocalEnabled && system.swiggy !== "connected" && <a className="connect-inline" href="/api/swiggy/connect">Connect Swiggy for a local menu check <ArrowIcon /></a>}
-
-            <fieldset className="field radio-field"><legend>How do you eat?</legend><div className="pill-group">{([ ["vegetarian", "Vegetarian"], ["egg-friendly", "Egg-friendly"], ["any", "Anything"] ] as const).map(([value,label]) => <label className="choice-pill" key={value}><input type="radio" name="diet" value={value} checked={brief.diet === value} onChange={() => set("diet", value)} /><span>{label}</span></label>)}</div></fieldset>
-            <fieldset className="field radio-field"><legend>What’s the goal?</legend><div className="pill-group">{([ ["high-protein", "High protein"], ["balanced", "Balanced"], ["lighter", "Something lighter"] ] as const).map(([value,label]) => <label className="choice-pill" key={value}><input type="radio" name="goal" value={value} checked={brief.goal === value} onChange={() => set("goal", value)} /><span>{label}</span></label>)}</div></fieldset>
-
-            <div className="field-grid three-col">
-              <label className="field"><span>Protein, at least</span><div className="number-input"><input type="number" min="0" max="200" step="1" value={brief.minProteinG} onChange={e => set("minProteinG", Number(e.target.value))} /><span>g</span></div></label>
-              <label className="field"><span>Calories, at most</span><div className="number-input"><input type="number" min="100" max="3000" step="10" value={brief.maxCaloriesKcal} onChange={e => set("maxCaloriesKcal", Number(e.target.value))} /><span>kcal</span></div></label>
-              <label className="field"><span>Total budget</span><div className="number-input budget"><span>₹</span><input type="number" min="50" max="10000" step="10" value={brief.budgetInr} onChange={e => set("budgetInr", Number(e.target.value))} /></div><FieldHint>Including delivery and fees</FieldHint></label>
-            </div>
-            <div className="field-grid two-col">
-              <label className="field"><span>Cuisine, if you have one in mind</span><input type="text" maxLength={80} value={brief.cuisine} onChange={e => set("cuisine", e.target.value)} placeholder="Anything sounds good" /></label>
-              <label className="field"><span>Anything else?</span><input type="text" maxLength={280} value={brief.wish} onChange={e => set("wish", e.target.value)} placeholder="Spicy, no mushrooms..." /></label>
-            </div>
-            <label className="check-row"><input type="checkbox" checked={brief.strictNutrition} onChange={e => set("strictNutrition", e.target.checked)} /><span>Only call it an exact match when nutrition is documented</span></label>
-            <div className="form-footer"><p>We’ll show uncertain nutrition and prices clearly.</p><button className="button button-primary" disabled={busy} type="submit">{busy ? "Checking…" : "Build my brief"} <ArrowIcon /></button></div>
-            {message && <p className="form-message" role="status">{message}</p>}
-          </form>
+          <div id="process" className="process-row"><div><span>01 / TELL US</span><p>Your craving, your limits.</p></div><div><span>02 / EXPLORE</span><p>Real food with clear caveats.</p></div><div><span>03 / CHOOSE</span><p>Your call before the cart.</p></div></div>
         </div>
       </section>
 
-      <section id="results" className="results-section container">
-        <div className="section-kicker">A GLIMPSE OF WHAT’S NEXT</div>
-        <div className="results-heading"><h2>Find something<br /><em>worth choosing.</em></h2><p>These cards show the planned result experience. They are examples, not live recommendations or nutrition estimates.</p></div>
-        <div className="preview-banner"><span className="status-dot" /> DESIGN PREVIEW <span>Live matching and source checks arrive in the next phase.</span></div>
-        <div className="preview-grid">{preview.map((item,index) => <article className={`preview-card preview-card-${index}`} key={item.number}><div className="preview-image" style={{ backgroundPosition: item.position }} role="img" aria-label={item.name} /><div className="preview-card-body"><div className="preview-card-top"><span>EXAMPLE DISH</span><span>{item.number} / 03</span></div><h3>{item.name}</h3><p>{item.category}</p><div className="preview-divider" /><div className="preview-meta"><span>Nutrition source <strong>pending</strong></span><span>Live price <strong>pending</strong></span></div></div></article>)}</div>
-      </section>
+      <section id="results" className="results-section" aria-labelledby="results-title">
+        <div className="container">
+          <div className="section-topline"><span>03 / 03</span><span>THE SHORTLIST</span></div>
+          <div className="results-heading"><div><p className="eyebrow">LESS GUESSWORK, MORE GOOD FOOD</p><h2 id="results-title">Meals worth a <em>closer look.</em></h2></div><p>Good choices come with context. See what’s available, what it costs so far, and what still needs checking.</p></div>
+          {submittedBrief && <div className="brief-summary"><span>YOUR BRIEF</span><strong>{resultSummary(submittedBrief)}</strong><a href="#meal-brief">Edit brief ↗</a></div>}
+          {resultMessage && <p className={`result-message ${searchStatus === "error" ? "result-message-error" : ""}`} role="status">{resultMessage}</p>}
 
-      {system?.swiggyLocalEnabled && <section className="integration-section container" aria-labelledby="integration-heading">
-        <div className="integration-copy"><div className="section-kicker">LOCAL INTEGRATION CHECK</div><h2 id="integration-heading">Check the real menu.</h2><p>This small test area reads Swiggy’s menu for your selected address. It does not assess nutrition or rank meals yet.</p></div>
-        <div className="integration-card">
-          {system.swiggy !== "connected" ? <div className="integration-connect"><p>Connect your Swiggy account to test a real menu on localhost.</p><a href="/api/swiggy/connect" className="button button-dark">Connect Swiggy <ArrowIcon /></a></div> : <>
-            <form onSubmit={searchLive} className="live-search-form"><label className="field"><span>Saved address</span><select value={selectedAddress} onChange={e => setSelectedAddress(e.target.value)}><option value="">Choose an address</option>{addresses.map(address => <option key={address.id} value={address.id}>{address.label}</option>)}</select></label><label className="field"><span>Dish to look up</span><input value={dishQuery} maxLength={80} onChange={e => setDishQuery(e.target.value)} placeholder="e.g. paneer tikka" /></label><button className="button button-dark" disabled={busy || !selectedAddress} type="submit">Search live menu <ArrowIcon /></button></form>
-            {labMessage && <p className="lab-message" role="status">{labMessage}</p>}
-            {liveItems && <div className="live-items"><div className="live-items-header"><strong>{liveItems.length} menu items</strong><span>Menu prices only · nutrition unknown</span></div>{liveItems.slice(0, 8).map(item => <div className="live-item" key={`${item.restaurantId}:${item.menuItemId}`}><div><strong>{item.name}</strong><span>{item.restaurantName} · {item.priceInr === null ? "Price unavailable" : `₹${item.priceInr} before fees`}</span></div><button type="button" disabled={busy || item.hasCustomizations || item.inStock === false} onClick={() => void cartProbe(item)}>Test cart ↗</button></div>)}</div>}
-            {cartResult && <div className="cart-audit"><strong>{cartResult.status === "verified" ? "Cart read-back verified" : "Cart needs review"}</strong><p>Final payable: {typeof (cartResult.cart as Record<string, unknown> | undefined)?.toPayInr === "number" ? `₹${(cartResult.cart as Record<string, unknown>).toPayInr}` : "Unavailable"}. No order was placed.</p></div>}
-          </>}
+          {isLoading && <div className="results-grid" aria-label="Loading menu results"><div className="skeleton-card" /><div className="skeleton-card" /><div className="skeleton-card" /></div>}
+          {searchStatus === "live" && liveItems && liveItems.length > 0 && <><div className="live-results-label"><span className="live-dot" /> {liveItems.length} LIVE MENU ITEMS <span>Menu price only · nutrition not verified</span></div><div className="results-grid">{liveItems.slice(0, 12).map(item => <MenuCard key={`${item.restaurantId}:${item.menuItemId}`} item={item} busy={busy} onCartProbe={cartProbe} />)}</div></>}
+          {searchStatus === "live" && liveItems?.length === 0 && <div className="results-empty"><span className="empty-symbol" aria-hidden="true">✳</span><h3>No dishes found this time.</h3><p>Try another dish name or change the selected address, then search again.</p><a className="text-link" href="#meal-brief">Edit your brief <ArrowIcon /></a></div>}
+          {(searchStatus === "idle" || searchStatus === "preview" || searchStatus === "error") && <div className="results-empty"><span className="empty-symbol" aria-hidden="true">✳</span><h3>{searchStatus === "idle" ? "Your next good find starts above." : searchStatus === "error" ? "We couldn’t fetch that menu." : "Your brief is ready."}</h3><p>{searchStatus === "idle" ? "Set a goal, a budget, and something you’re in the mood for. Your choices will appear here." : searchStatus === "error" ? "Your choices are saved in the form. Check the message above and try again." : "Live menu items appear here after you connect Swiggy and choose an address. Full goal-aware ranking comes in the next phase."}</p><a className="text-link" href="#meal-brief">{searchStatus === "idle" ? "Build my meal" : "Back to my brief"} <ArrowIcon /></a></div>}
+          {cartResult && <div className="cart-audit"><span>LOCAL CART CHECK</span><strong>{cartResult.status === "verified" ? "Cart read-back verified" : "Cart needs review"}</strong><p>Final payable: {typeof (cartResult.cart as Record<string, unknown> | undefined)?.toPayInr === "number" ? `₹${(cartResult.cart as Record<string, unknown>).toPayInr}` : "Unavailable"}. No order was placed.</p></div>}
+          <div className="results-footnote"><span aria-hidden="true">✳</span><p>CraveCode never places an order for you. A menu price is not the final total, and an unknown macro is never called a match.</p></div>
         </div>
-      </section>}
+      </section>
     </main>
 
-    <footer className="site-footer"><div className="container footer-inner"><Logo /><p>Made for meals that make sense.</p><a href="#top">Back to top ↑</a></div></footer>
+    <footer className="site-footer"><div className="container footer-inner"><Logo /><p>For cravings with a little more thought.</p><a href="#top">Back to top ↑</a></div></footer>
   </div>;
 }

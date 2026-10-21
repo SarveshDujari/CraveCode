@@ -59,7 +59,7 @@ Build:
 - Revalidate item/variant and stock before mutation. Serialize cart operations per user, use app-level idempotency keys and job versions, and read the live cart after a write or uncertain timeout. Show success only after contents and `to_pay` are verified.
 - If the final total exceeds the budget, show the difference and return to alternatives. If stock, variants, or cart state change, stop and explain; do not retry an uncertain mutation blindly.
 - Add Sentry tracing for the full search-to-cart path, with one real diagnosed issue or failure case. Complete the MongoDB cart audit and resume states.
-- Implement the eight-illustration CraveCode orbit and the short white → black → white scroll sequence in the [revised frontend design](./FRONTEND_DESIGN.md). Keep native scrolling and a fully usable static/reduced-motion version. Use optimized versions of the supplied food illustrations.
+- Polish and performance-check the implemented eight-illustration CraveCode orbit and short white → black → white scroll sequence in the [frontend design](./FRONTEND_DESIGN.md). Keep native scrolling and a fully usable static/reduced-motion version; optimize the supplied food illustrations before public launch.
 - Tighten keyboard navigation, focus, loading announcements, 320px layout, and error states.
 
 **Deliverable:** An end-to-end demo from request to selected cart, with a verified total, plus the distinctive editorial scroll transition.

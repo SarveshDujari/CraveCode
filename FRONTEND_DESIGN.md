@@ -1,6 +1,6 @@
 # CraveCode frontend redesign plan
 
-**Status:** Design direction; the running Phase 1 UI still uses the earlier MealPilot layout. The product and data rules remain in [ARCHITECTURE.md](./ARCHITECTURE.md). Use the repository spelling **CraveCode** consistently in the new UI.
+**Status:** The three-scene layout, eight-image orbit, responsive form, results states, and scroll motion are implemented in the Phase 1 frontend. Live goal-aware ranking and image optimization remain future work. The product and data rules remain in [ARCHITECTURE.md](./ARCHITECTURE.md).
 
 ## Experience and page map
 

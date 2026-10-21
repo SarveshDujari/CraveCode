@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: mealpilot
+    name: cravecode
     runtime: node
     plan: free
     region: singapore
