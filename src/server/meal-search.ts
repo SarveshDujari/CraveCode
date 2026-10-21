@@ -111,7 +111,12 @@ export async function searchWithWeb(brief: MealBrief, searchWeb: WebSearch, plan
       if (!validWebUrl(lead.url) || seen.has(lead.url)) continue;
       const domain = trustedDeliveryHost(lead.url);
       if (!domain) continue;
-      const matchCount = tokens(queries[index]).filter(word => tokens(`${lead.title} ${new URL(lead.url).pathname}`).includes(word)).length;
+      const dishQuery = brief.cuisine && queries[index].toLowerCase().startsWith(brief.cuisine.toLowerCase())
+        ? queries[index].slice(brief.cuisine.length).trim() : queries[index];
+      const queryWords = tokens(dishQuery);
+      const pageWords = tokens(`${lead.title} ${new URL(lead.url).pathname}`);
+      if (queryWords[0] && !pageWords.includes(queryWords[0])) continue;
+      const matchCount = queryWords.filter(word => pageWords.includes(word)).length;
       if (matchCount === 0) continue;
       seen.add(lead.url);
       const title = lead.title.trim();
