@@ -122,7 +122,7 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
   const pathname = url.pathname;
 
   if (method === "GET" && pathname === "/api/health") {
-    json(response, 200, { ok: true, service: "mealpilot", phase: 2 });
+    json(response, 200, { ok: true, service: "mealpilot", phase: 2, searchRevision: 3 });
     return;
   }
   if (method === "GET" && pathname === "/api/system") {

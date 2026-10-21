@@ -69,9 +69,11 @@ test("public discovery drops unrelated menu pages and caps output", async () => 
   const result = await searchWithWeb({ ...brief, city: "Bengaluru", dish: "paneer" }, async () => [
     { title: "Menu", url: "https://en.wikipedia.org/wiki/Menu", snippet: "Menu definition", imageUrl: null },
     { title: "The Good Bowl", url: "https://www.swiggy.com/the-good-bowl", snippet: "Order online", imageUrl: null },
+    { title: "Paneer in Mumbai", url: "https://www.swiggy.com/city/mumbai/paneer-restaurants", snippet: "Order online", imageUrl: null },
     ...Array.from({ length: 20 }, (_, index) => ({ title: `Paneer restaurant ${index}`, url: `https://www.swiggy.com/paneer-${index}`, snippet: "Order online", imageUrl: null }))
   ]);
   assert.equal(result.results.length, 12);
   assert.ok(result.results.every(item => item.sourceUrl?.includes("swiggy.com")));
   assert.ok(result.results.every(item => item.title.includes("Paneer")));
+  assert.ok(result.results.every(item => !item.sourceUrl?.includes("/city/mumbai/")));
 });

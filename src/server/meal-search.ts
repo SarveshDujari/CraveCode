@@ -95,6 +95,20 @@ function trustedDeliveryHost(url: string): string | null {
   return deliveryHosts.find(domain => host === domain || host.endsWith(`.${domain}`)) || null;
 }
 
+function cityFitsPage(url: string, city: string): boolean {
+  const pathname = new URL(url).pathname.toLowerCase();
+  const cityInPath = pathname.match(/\/city\/([^/]+)/)?.[1];
+  if (!cityInPath) return true;
+  const wanted = city.toLowerCase().trim().replace(/\s+/g, "-");
+  const aliases = new Set([wanted]);
+  if (wanted === "bengaluru") aliases.add("bangalore");
+  if (wanted === "bangalore") aliases.add("bengaluru");
+  if (wanted === "mumbai") aliases.add("bombay");
+  if (wanted === "kolkata") aliases.add("calcutta");
+  if (wanted === "chennai") aliases.add("madras");
+  return aliases.has(cityInPath);
+}
+
 export async function searchWithWeb(brief: MealBrief, searchWeb: WebSearch, plannedQueries = planQueries(brief)): Promise<MealSearchResponse> {
   const queries = plannedQueries.slice(0, 3);
   const city = brief.city.trim();
@@ -111,6 +125,7 @@ export async function searchWithWeb(brief: MealBrief, searchWeb: WebSearch, plan
       if (!validWebUrl(lead.url) || seen.has(lead.url)) continue;
       const domain = trustedDeliveryHost(lead.url);
       if (!domain) continue;
+      if (!cityFitsPage(lead.url, city)) continue;
       const dishQuery = brief.cuisine && queries[index].toLowerCase().startsWith(brief.cuisine.toLowerCase())
         ? queries[index].slice(brief.cuisine.length).trim() : queries[index];
       const queryWords = tokens(dishQuery);
