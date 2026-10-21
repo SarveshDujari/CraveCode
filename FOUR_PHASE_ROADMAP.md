@@ -59,7 +59,7 @@ Build:
 - Revalidate item/variant and stock before mutation. Serialize cart operations per user, use app-level idempotency keys and job versions, and read the live cart after a write or uncertain timeout. Show success only after contents and `to_pay` are verified.
 - If the final total exceeds the budget, show the difference and return to alternatives. If stock, variants, or cart state change, stop and explain; do not retry an uncertain mutation blindly.
 - Add Sentry tracing for the full search-to-cart path, with one real diagnosed issue or failure case. Complete the MongoDB cart audit and resume states.
-- Implement the hero food-to-ribbon scroll sequence. Keep it short, tied to scrolling, and separate from the form and cards. Add static/reduced-motion and mobile swipe versions. Use optimized, consistently art-directed food imagery.
+- Implement the eight-illustration CraveCode orbit and the short white → black → white scroll sequence in the [revised frontend design](./FRONTEND_DESIGN.md). Keep native scrolling and a fully usable static/reduced-motion version. Use optimized versions of the supplied food illustrations.
 - Tighten keyboard navigation, focus, loading announcements, 320px layout, and error states.
 
 **Deliverable:** An end-to-end demo from request to selected cart, with a verified total, plus the distinctive editorial scroll transition.
@@ -95,7 +95,7 @@ Sentry ─> diagnosis and evidence
 Render + .tech + Entire ─> public presentation and build story
 ```
 
-If schedule compresses, cut in this order: extra cuisine filters, saved-history personalization, elaborate animation details, then extra result-card variants. Preserve the real search path, source honesty, explicit cart consent, final-total verification, deployed demo, and article. The ribbon can become a simpler transform or static strip; fake nutritional certainty and fake cart success cannot be used to save time.
+If schedule compresses, cut in this order: extra cuisine filters, saved-history personalization, elaborate animation details, then extra result-card variants. Preserve the real search path, source honesty, explicit cart consent, final-total verification, deployed demo, and article. The orbit can remain static and the sections can scroll naturally; fake nutritional certainty and fake cart success cannot be used to save time.
 
 ## Immediate next actions
 

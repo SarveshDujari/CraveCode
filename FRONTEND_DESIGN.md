@@ -1,164 +1,131 @@
-# MealPilot frontend design plan
+# CraveCode frontend redesign plan
 
-**Status:** Design direction for the Hacktoberfest demo. This extends [ARCHITECTURE.md](./ARCHITECTURE.md), particularly its evidence, budget, and cart rules.
+**Status:** Design direction; the running Phase 1 UI still uses the earlier MealPilot layout. The product and data rules remain in [ARCHITECTURE.md](./ARCHITECTURE.md). Use the repository spelling **CraveCode** consistently in the new UI.
 
-## 1. The experience in one sentence
+## Experience and page map
 
-An editorial food discovery page turns an appetizing set of dishes into a moving ribbon, then lets the user describe the meal they need and inspect a small, trustworthy shortlist before preparing a cart.
+One uninterrupted page has three scenes:
 
-The visual reference is [Refero's Steep style](https://styles.refero.design/style/75fdb89f-ca64-41b3-af36-7a78bd09448e): generous white space, expressive serif headlines, warm paper, dark ink, a peach accent, fine dividers, and soft geometric cards. Steep itself avoids photography; our adaptation deliberately adds carefully art-directed food images because food is the product. We are borrowing the design language, not copying its analytics layout.
+1. **White welcome:** a large centered CraveCode wordmark, a one-sentence promise, and the eight supplied food illustrations floating in a loose circle. A visible **Find my meal** CTA leads to the form.
+2. **Black meal brief:** a full-width near-black section arrives naturally as the visitor scrolls. A compact form collects location, diet, goals, limits, and tastes. Search progress stays in this section.
+3. **White results:** fetched dishes appear as evidence-aware cards. Selecting one opens a review step before any cart change.
 
-## 2. Page narrative
-
-| Scene | What the user sees | What it achieves |
-| --- | --- | --- |
-| 1. Arrival | A calm header, a clear promise, three to five appetizing dishes on a pale background, and a visible **Find my meal** button. | Explain the product immediately; do not require scrolling to discover its purpose. |
-| 2. Food ribbon | As the user scrolls, the dishes shrink, align, and become a single horizontal ribbon. The ribbon travels sideways for one short scroll segment. | A memorable transition from inspiration to choice. |
-| 3. Meal brief | The ribbon settles above an uncluttered form. One question at a time visually, but all essential controls remain visible. | Make an exact search easy to enter. |
-| 4. Search progress | The form stays in place. A compact progress panel reports **Finding available meals → Checking nutrition sources → Comparing prices**. | Make agent work legible without a fake percentage. |
-| 5. Shortlist | Three to five large cards arrive as a stable grid, led by the best verified match or a clearly marked closest alternative. | Let the user compare evidence and tradeoffs. |
-| 6. Cart review | Selecting a card opens a focused review panel; **Prepare cart** is a distinct action. After preparation, show the actual cart contents and final payable total. | Give the user control at the consequential step. |
-
-The user can jump directly to the form from the hero button or keyboard navigation. The page is useful even if the scroll animation is skipped.
-
-## 3. Layout sketch
+Suggested hero copy: **CraveCode** / “Find food that fits your cravings, goals, and budget.” / “Compare real menu options before you choose what goes in your cart.” The second line should remain honest until live search is available; if the demo is running on fixture data, say so visibly.
 
 ```text
-DESKTOP  — max content width 1200px
-┌──────────────────────────────────────────────────────────────────────┐
-│ MealPilot                                      How it works   My meals │
-├──────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  The right meal, without                 [dish]   [dish]             │
-│  the menu marathon.                [dish]      [dish]                │
-│                                                                      │
-│  Tell us your budget and goals. We find food you can actually order. │
-│  [ Find my meal ↗ ]                                                 │
-│                                                                      │
-├──────────────────────────────────────────────────────────────────────┤
-│      [dish] — [dish] — [dish] — [dish] — [dish]  →                   │
-├──────────────────────────────────────────────────────────────────────┤
-│  What are you in the mood for?                                       │
-│  Delivery area/address     [ chosen Swiggy address             ▾ ]   │
-│  Diet                      [ Vegetarian ][ Egg-friendly ][ Any ]     │
-│  Goal                      [ High protein ][ Balanced ][ Lighter ]   │
-│  Protein                   [ 35 ] g minimum   [strict / flexible]    │
-│  Calories                  [ 700 ] kcal maximum [strict / flexible]  │
-│  Total budget              [ ₹350 ] including fees                  │
-│  Cuisine                   [ Any cuisine ▾ ]                         │
-│  Optional request          [ e.g. spicy dinner, no mushrooms   ]    │
-│                                                      [ Find meals ]  │
-├──────────────────────────────────────────────────────────────────────┤
-│  3 matches near your goal      [sort / filters]                      │
-│  [featured card spans 2 cols]        [card]                          │
-│  [card]                               [card]                          │
-└──────────────────────────────────────────────────────────────────────┘
-
-MOBILE — one column
-Brand → headline → one hero dish → short ribbon/swipe → form → cards.
-The primary action remains full-width; card data stacks in reading order.
+WHITE / ARRIVAL
+┌───────────────────────────────────────────────────────────────┐
+│ CraveCode                                 How it works  Find  │
+│       [pizza]       [biryani]        [tikka]                  │
+│ [salad]                CraveCode                 [burger]      │
+│ [dosa]     Food that fits your day.             [wrap]        │
+│                   [ Find my meal ↓ ]                          │
+│                       [sandwich]                              │
+└───────────────────────────────────────────────────────────────┘
+                         natural scroll ↓
+BLACK / MEAL BRIEF
+┌───────────────────────────────────────────────────────────────┐
+│ What are you craving?          [address / connect]            │
+│ Cravings meet real limits.     [diet] [goal]                   │
+│                               [protein] [calories] [budget]   │
+│                               [cuisine] [avoid / notes]       │
+│                               [ Find food that fits → ]       │
+│                  search / evidence / comparison status        │
+└───────────────────────────────────────────────────────────────┘
+                         natural scroll ↓
+WHITE / RESULTS
+┌───────────────────────────────────────────────────────────────┐
+│ Meals worth a closer look             [edit brief] [sort]      │
+│ Search summary and source / price caveat                      │
+│ [featured card] [card] [card]                                 │
+│ [card]          [card] [card]                                  │
+│ [why it fits] → [review exact item] → [prepare cart]           │
+└───────────────────────────────────────────────────────────────┘
 ```
 
-The headline can be tested against a more direct version, “Food that fits your day.” The support sentence must always say what the app actually does: finds *available* options, compares the user's targets, and prepares a chosen cart.
+The header stays quiet and changes text color when the dark section occupies the viewport. The main CTA always reaches the form. No separate long “how it works” section interrupts this three-scene story; a short explanation can live below the form or in the footer.
 
-## 4. Visual system
+## Visual system and supplied art
 
-| Token | Direction | Usage |
-| --- | --- | --- |
-| Canvas | `#FCFBF8` warm white | Page background; feels like uncoated paper. |
-| Ink | `#1D1B19` | Headlines, body text, key labels. |
-| Cocoa | `#5D2A1A` | Primary button, focus and selected states. |
-| Peach | `#FBE1D1` | One large featured surface or highlight per viewport. |
-| Mist | `#F2F2F3` | Secondary cards and input surfaces. |
-| Muted | `#74736F` | Supporting text, never essential status by color alone. |
-| Serif | Signifier if licensed; otherwise Source Serif 4 | Display headline and major section titles only. |
-| Sans | Söhne if licensed; otherwise Inter | Controls, cards, captions, data. |
-| Width/spacing | 1200px container; 80–112px desktop section space; 24–32px mobile | Generous rhythm with enough room for food images. |
-| Shape | 20–24px cards, pill controls, fine 1px warm-gray rules | Soft without looking like a generic dashboard. |
+| Element | Direction |
+| --- | --- |
+| Backgrounds | `#FFFFFF` for welcome and results; near-black `#111113` for the form. Remove the current beige overall background. |
+| Type | Strong sans-serif wordmark; highly readable sans-serif controls and cards. One expressive display face is optional, never at the expense of clarity. |
+| Contrast | Near-black `#171719` on white; soft white `#F7F7F5` on black. Secondary text remains readable. |
+| Accent | One restrained warm orange/coral sampled from the illustrations for selected states, focus, and the CTA. |
+| Surfaces | Generous space, fine borders, 12–20px radii, crisp cards. Avoid nested boxes and heavy shadows. |
+| Result imagery | Use an exact fetched menu photo when available. Otherwise show a neutral labeled placeholder; hero art is decorative, not a photo of a real menu item. |
 
-Food art direction: photograph or render real dishes against a shared cream or warm-gray backdrop, 3/4 overhead angle, natural side light, realistic portions, and consistent crop. Use 4–5 strong images, not a dense carousel. Preserve the source's quiet look by keeping backgrounds neutral and saturation in the food itself. Any production imagery needs a usable license or ownership. Avoid labels baked into images; all names and nutrition facts are accessible text.
+The eight source files sit one directory above this app: `biryani_animated.png`, `burger_animated.png`, `dosa_animated.png`, `pizza_animated.png`, `salad_animated.png`, `sandwich_animated.png`, `tikka_animated.png`, and `wrap_animated.png`. They are transparent still PNG illustrations despite their names. CSS will supply their floating motion. Keep the originals intact and place optimized derivatives in `public/food/` when implementing. Together the PNGs are about 1.9 MB, so serve appropriately sized WebP/AVIF variants and reserve each image's dimensions to prevent layout shifts.
 
-## 5. Scroll choreography
+## Hero layout and scrolling
 
-The animation is a transition, not an endless marquee. It should work like this:
+Place the eight dishes at roughly 45-degree intervals on an invisible circular track around the centered wordmark. Vary size and rotation a little so the layout feels art directed rather than perfectly mechanical. Keep a protected center zone for the headline and button; no food image may cover readable text. The ring has no visible outline.
 
-1. **Hero (0–25% of sequence):** food objects sit loosely around the hero copy at different scales. Copy remains readable and the CTA is available.
-2. **Gather (25–60%):** each object travels toward an invisible horizontal baseline and scales to the same card height. Background decorations fade out. Use opacity and transforms rather than changing layout dimensions on every scroll tick.
-3. **Ribbon (60–90%):** the aligned group translates horizontally as the scroll progresses, revealing different dishes. Keep the journey to roughly one viewport of scroll; no long forced pinning.
-4. **Handoff (90–100%):** movement stops. The form heading enters below and the ribbon becomes a stable, optionally swipeable strip of dish images. Scrolling onward behaves normally.
+At rest, each image drifts vertically only 4–8px and rotates at most 2 degrees on offset 7–11 second cycles. Hover/pointer parallax can be a tiny desktop enhancement, but the effect must work without a pointer. Mark these duplicated decorative illustrations with empty alt text and hide them from assistive technology.
 
-The ribbon is decorative exploration, not the only way to pick a dish. It has no auto-play once settled. If its dish chips become interactive, they must be keyboard-operable and add a cuisine or dish preference to the form rather than silently change hard constraints.
+Use a short scroll story without hijacking the browser:
 
-Implementation direction: a small client-side component with one GSAP ScrollTrigger timeline can coordinate the gather, scale, and sideways translation. Its documented `scrub`, `pin`, and refresh behavior suit this exact choreography ([GSAP ScrollTrigger](https://gsap.com/docs/v3/Plugins/ScrollTrigger/)). Scope it to the hero only and recalculate after responsive image layout changes. Prefer `transform` and `opacity` for smooth rendering ([web.dev animation guidance](https://web.dev/articles/animations-guide)). Keep the rest of the page standard document flow.
+| Segment | Change |
+| --- | --- |
+| Arrival | Wordmark, promise, CTA, and all eight images are visible. CTA skips to the form. |
+| First downward movement | Images move outward slightly, scale down, and fade; the wordmark rises subtly. The black section enters in normal document flow. |
+| Dark section enters | Heading and form reveal with a restrained translation/opacity change, then stay still for interaction. |
+| Results enter | Cards reveal once with a small stagger; nothing moves while being read. |
 
-For `prefers-reduced-motion: reduce`, skip the gathering/sideways travel entirely: show one static hero composition and the settled ribbon, with a simple fade or no transition. On narrow/mobile screens, use a much shorter transformation or static swipe strip. MDN documents reduced-motion as an accessibility preference to minimize nonessential movement ([MDN](https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Media_queries/Using_for_accessibility)). No scroll hijacking, looping marquee, or animation that must finish before the form is usable.
+Keep any sticky hero segment shorter than roughly one viewport and remove it if testing exposes a blank scroll track. Drive `transform` and `opacity` from one bounded scroll-progress value, batch DOM writes with `requestAnimationFrame`, and avoid React rerenders on every scroll frame. Use native scrolling, with no forced snap or synthetic scroll speed. The full-width dark section itself creates the white-to-black transition; avoid an expensive animated mask.
 
-## 6. Meal brief: precise but inviting
+On narrow screens, retain all eight cutouts at smaller sizes in two loose arcs above and below the central copy. At 320px width, legibility takes precedence over a mathematically exact circle. Disable pointer parallax on touch. Under `prefers-reduced-motion: reduce`, show a static composition and remove bobbing, stagger, sticky choreography, and smooth auto-scroll.
 
-The form should feel like a short conversation, but remain ordinary labeled controls. It is one screen on desktop and a clear vertical sequence on mobile, with a persistent **Find meals** action once the fields are valid.
+## Black meal-brief section
 
-| Field | UI | Behavior |
-| --- | --- | --- |
-| Delivery location | Address selector connected to Swiggy | Required to search genuinely deliverable items. Show exact selected area; do not substitute a web-search location. |
-| Diet | Single-select radio chips: **Vegetarian**, **Egg-friendly**, **Any**; optional **Vegan** only if filtering can be verified | This gives the user's requested tick-box feel without allowing contradictory choices. Allergens/exclusions are separate explicit fields. |
-| Goal | Single-select suggestions: **High protein**, **Balanced**, **Lighter** | Prefills sensible input values but does not override numbers the user changes. |
-| Protein | Numeric minimum in grams | Label explicitly says “at least.” A nearby strict/flexible control decides whether unknown nutrition can appear in exact-match results. |
-| Calories | Numeric maximum in kcal | Label explicitly says “at most.” If unknown, the app never claims compliance. |
-| Budget | Numeric amount in INR, “including taxes and delivery fees” | Required. Before cart preparation, result prices are estimates. |
-| Cuisine / food | Optional searchable chips or simple select, e.g. North Indian, South Indian, Chinese, rolls, bowls | “Any” is the default. No false promise of exhaustive categories. |
-| Additional wish | Short optional text | Extract taste preferences and exclusions, then show the interpreted constraints for review. |
+The form should sit directly on the dark surface, rather than inside a bright card. Use charcoal inputs, fine gray borders, white labels, and a warm selected state. Desktop uses a 35/65 split: concise copy left, form right. Mobile stacks heading then form. Keep the primary button at the bottom of the form, never overlaid on fields.
 
-Sensible default example: “Dinner · Vegetarian · 35 g+ protein · up to 700 kcal · ₹350 total.” Show a concise summary above results so users can edit and rerun. If a strict request has no documented nutrition evidence, say so and show closest alternatives rather than silently loosening it. Preserve form state through loading, back navigation, and refresh.
+Group the existing parameters by purpose:
 
-## 7. Result cards and evidence
+1. **Where and when:** saved delivery address and meal occasion. If disconnected, show the Swiggy connection requirement plainly. Do not imply live availability without an address.
+2. **How you eat:** vegetarian, egg-friendly, or anything; high-protein, balanced, or lighter goal. Use native radio inputs styled as segmented controls.
+3. **Your limits:** protein minimum in g, calorie maximum in kcal, and all-in budget in ₹. Show strict/flexible meaning clearly.
+4. **Your taste:** optional cuisine, exclusions, and a short free-text request.
 
-Cards should be visually rich but informationally honest. A suggested card hierarchy:
+The action reads **Find food that fits**. Validate inline and preserve values on errors or reruns. After submit, report real workflow stages—**Finding available food → Checking nutrition evidence → Comparing price and fit**—without inventing a percentage. The user can edit a previous brief and rerun it.
+
+## White results section
+
+Before a real search, show a purposeful empty state instead of fabricated deals. During search, reserve the card area with stable skeletons so the page does not jump. On completion, scroll the result heading into view only if the user has not already moved elsewhere; respect reduced motion. Repeat the entered brief in a compact summary such as “Vegetarian dinner · 35g+ protein · under ₹350.”
+
+Desktop starts with one larger lead card and two standard cards, then a consistent grid. Mobile uses one column. Each fetched card shows the exact item and restaurant, an actual menu image if supplied, availability, **menu price before fees**, and nutrition status as **documented / estimated / unknown**. Show protein and calories only with a suitable source and portion match. Distinguish a true match from a closest alternative. **Why this fits** reveals constraints, source, and uncertainty; **Review meal** opens the exact-item selection panel.
+
+The review panel shows the item/variant and required customizations. **Prepare cart** is a separate explicit action. Afterward, show the cart read-back and real payable total; if it exceeds budget, say so. Checkout remains with Swiggy. Fixture/replay data remains visibly labeled. Never substitute the eight hero illustrations for a fetched dish photo without an explicit illustration label.
+
+Design all result states together: initial, loading, exact match, closest alternative, no match, unknown nutrition, platform error, sold-out item, existing-cart conflict, and verified cart. The grid should accommodate these without major layout jumps.
+
+## Components and implementation order
 
 ```text
-┌─────────────────────────────────────┐
-│ dish photograph                     │
-│ BEST DOCUMENTED MATCH               │
-│ Paneer rice bowl          Restaurant │
-│ 38 g protein · 610 kcal              │
-│ Documented for this item ↗           │
-│ ₹249 menu price · fees pending       │
-│ 30–40 min                            │
-│ Fits protein  ✓   Fits kcal  ✓       │
-│ [ Why this fits ] [ Review & choose ]│
-└─────────────────────────────────────┘
+App
+├─ SiteHeader (theme-aware)
+├─ OrbitHero (wordmark, copy, CTA, eight decorative food cutouts)
+├─ MealBriefSection (form, validation, progress)
+├─ ResultsSection (summary, state banner, candidate cards)
+│  ├─ CandidateCard
+│  └─ EvidencePanel
+├─ CartReviewPanel (explicit preparation and read-back)
+└─ Footer
 ```
 
-Desktop: one featured card taking two columns, plus two standard cards in a three-column composition. Mobile: all cards in a single column; do not hide source or price context behind hover. The peach surface belongs to the leading recommendation, while the remaining cards stay warm white or mist. Use still images in results; the scroll movement is already the visual event.
+1. Optimize and move the eight assets; replace the current photo hero and ribbon with a static orbit. Check desktop, tablet, 320px mobile, and 200% zoom before animation.
+2. Re-theme the existing working form as the black section without changing its API contract. Add disconnected, validation, and loading states.
+3. Build a reusable white results shell. Keep fixtures clearly labeled until Phase 2 supplies real recommendations.
+4. Add gentle floating and scroll choreography. Verify native scroll, anchors, keyboard focus, reduced motion, and touch behavior.
+5. Wire grounded search and evidence in Phase 2, then cart review/read-back in Phase 3. Card labels must follow actual data status.
 
-Every card must show: restaurant and exact item/variant, documented/estimated/unknown nutrition status, protein and calories only when supported, menu price as provisional, availability/ETA if provided, and why it matches or misses the entered constraints. **View evidence** opens a small panel with source URL, source date, portion/variant match, and limitations. A web result or snippet alone is not displayed as nutrition proof. A “closest alternative” badge is distinct from “exact match.”
+## Acceptance checks and cut line
 
-The **Review & choose** panel shows the exact selected item and customizations, evidence, estimated cost, and any uncertainty. **Prepare cart** is enabled only for a selected candidate; the app then refreshes availability and reads back the actual cart. The success state displays the real `to_pay` total and contents. If the total exceeds the user's budget, show the difference and return to alternatives; do not call it a budget match. If an existing cart must be replaced, show its contents and an explicit replace action first. Checkout stays with Swiggy.
+- The first viewport explains the product and shows a CTA. All eight dishes are visible on desktop without covering text; mobile stays readable.
+- White → black → white scrolling feels continuous with no forced snap, blank pinning, focus loss, or content jump.
+- Form and results work with keyboard, touch, and screen reader; units and error messages are explicit. Reduced-motion users get the full flow.
+- Search, no-match, error, and cart states truthfully report source and price. A fetched item uses its own photo or a marked placeholder.
+- Check the page on a mid-range phone and desktop. If scroll stutters, reduce moving layers before sacrificing search accuracy, evidence, or cart safety.
 
-## 8. Interaction states that deserve design attention
-
-- **Before search:** sample input or a tiny “Try this: ₹350, vegetarian, 35 g protein” action makes the product immediately understandable.
-- **Loading:** stable cards/skeletons plus named steps. Avoid changing claims as partial evidence arrives; only publish candidates after deterministic validation. Provide a cancel action if the workflow supports cancellation.
-- **No exact match:** a dedicated block explains the binding constraint, e.g. “No dish with documented 35 g protein under ₹350”; show up to three clearly labeled near matches and one-click edit suggestions.
-- **Source missing:** “Nutrition unknown” takes the place of invented numbers. It remains eligible only under flexible goals.
-- **Platform unavailable:** preserve the user's form and give a retry. A staged/replay demonstration is visibly labeled as such.
-- **Cart changed or item sold out:** stop with a clear reason, refresh choices, and never claim success until the cart read-back confirms it.
-- **Return visit:** restore preferences and recent searches as optional shortcuts, while keeping today's address, stock, and price fresh.
-
-## 9. Accessibility and performance acceptance
-
-- Keep a logical heading and tab order. The hero art is decorative where duplicated by text; actionable dish chips have names and visible focus rings.
-- Use real radio inputs for diet and goal, real numeric inputs with units, and descriptive error text. Never convey match status with color alone.
-- Announce search-stage and final-result changes through a polite live region; avoid announcing every animated frame.
-- Respect reduced motion, keyboard navigation, and touch. Test at 320px width and 200% zoom.
-- Load only the hero images immediately; responsive sizes and lazy loading cover the rest. Reserve image dimensions to prevent layout shifts.
-- Keep at most a handful of animated layers, remove `will-change` after the hero sequence, and test on a mid-range phone. Target a stable 60 fps *where capable*, with no blocked form interaction. Verify Core Web Vitals on the deployed page rather than promising a score in advance.
-
-## 10. Build order for this week's hack
-
-1. **Functional skeleton:** hero, working form, stateful progress, stable result-card and cart-review layouts using typed fixture data. Validate mobile and keyboard use.
-2. **Real data hookup:** connect the request, candidate, evidence, and cart states from the architecture. Make source and price labels accurate before polishing motion.
-3. **Signature sequence:** implement the hero-to-ribbon timeline with 4–5 optimized images; add reduced-motion and mobile variants.
-4. **Polish:** transitions between loading/results, empty/error states, content copy, photography consistency, and focused visual QA at common viewport sizes.
-5. **Demo path:** one successful real/staging search and cart review, plus one impossible request. Capture the scroll transition in a brief clip and let judges explore the working interface themselves.
-
-**Cut line if time is tight:** Keep the working form, evidence-rich result cards, and honest cart states. Shorten the ribbon animation before weakening the actual search or introducing misleading nutrition/price claims.
+**Cut line:** keep the static eight-dish hero, black working form, and honest fetched-result cards. Shorten the scroll choreography first if time is tight.

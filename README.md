@@ -4,6 +4,8 @@ MealPilot is a meal-discovery agent in progress. Give it a budget, diet, protein
 
 The project is being built in [four phases](./FOUR_PHASE_ROADMAP.md). The [architecture](./ARCHITECTURE.md) and [frontend design](./FRONTEND_DESIGN.md) set the constraints for later work. **This repository currently contains the Phase 1 shell and integration probes, not the finished recommendation agent.** Example result cards are explicitly marked as design previews.
 
+The next frontend iteration is planned as **CraveCode**: a white hero with eight floating food illustrations, a black meal-brief section, and white fetched-result cards. The screenshot below shows the existing Phase 1 shell, before that redesign.
+
 ![Phase 1 MealPilot homepage](./docs/phase1-hero.png)
 
 ## Run locally
