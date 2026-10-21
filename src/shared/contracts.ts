@@ -13,6 +13,8 @@ export const mealBriefSchema = z.object({
   maxCaloriesKcal: z.number().finite().min(100).max(3000),
   budgetInr: z.number().finite().min(50).max(10000),
   strictNutrition: z.boolean().default(true),
+  dish: z.string().trim().max(80).default(""),
+  city: z.string().trim().max(80).default(""),
   cuisine: z.string().trim().max(80).default(""),
   wish: z.string().trim().max(280).default("")
 });
@@ -80,3 +82,21 @@ export type PreviewMenuItem = {
   inStock: boolean | null;
   hasCustomizations: boolean;
 };
+
+export const mealResultSchema = z.object({
+  id: z.string(), title: z.string(), restaurant: z.string(), imageUrl: z.string().nullable(),
+  menuPriceInr: z.number().nonnegative().nullable(),
+  diet: z.enum(["vegetarian", "non-vegetarian", "unknown"]),
+  availability: z.enum(["available", "unknown"]),
+  source: z.enum(["swiggy-live", "web-lead"]), sourceUrl: z.url().nullable(),
+  nutritionSources: z.array(z.object({ title: z.string(), url: z.url() })),
+  match: z.enum(["closest", "unverified"]), reasons: z.array(z.string()), cautions: z.array(z.string()), score: z.number()
+});
+
+export const mealSearchResponseSchema = z.object({
+  version: z.literal(1), jobId: z.string(), source: z.enum(["swiggy-live", "web-leads", "none"]),
+  queries: z.array(z.string()), results: z.array(mealResultSchema), warnings: z.array(z.string()), searchedAt: z.iso.datetime()
+});
+
+export type MealResult = z.infer<typeof mealResultSchema>;
+export type MealSearchResponse = z.infer<typeof mealSearchResponseSchema>;

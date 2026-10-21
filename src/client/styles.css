@@ -93,6 +93,8 @@ h1,h2,h3,p{margin-top:0}
 .field-hint{font-size:10px!important;font-weight:400!important;color:#9b999b!important;margin-top:-3px}
 .taste-fields{margin-top:22px}
 .live-query{margin:4px 0 22px}
+.optional-tag{font-size:9px;color:#ff9a75;letter-spacing:1px;margin-left:6px}
+.public-source-note{font-size:11px;line-height:1.6;color:#c3b7b0;background:#282522;border:1px solid #50433e;border-radius:10px;padding:12px 14px;margin:0 0 22px}
 .check-row{display:flex;align-items:flex-start;gap:11px;color:#b6b4b4;font-size:12px;line-height:1.5;cursor:pointer;margin:22px 0 26px}
 .check-row input{accent-color:#ff8a60;width:17px;height:17px;margin:1px 0 0;flex:none}
 .form-footer{border-top:1px solid #39393c;padding-top:24px;display:flex;justify-content:space-between;align-items:center;gap:18px}
@@ -144,6 +146,8 @@ h1,h2,h3,p{margin-top:0}
 .menu-card-details summary{display:flex;justify-content:space-between;cursor:pointer;list-style:none;padding:15px 0;font-size:11px;font-weight:800}
 .menu-card-details summary::-webkit-details-marker{display:none}
 .menu-card-details p{font-size:11px;line-height:1.6;color:#78716c;padding-bottom:13px;margin:0}
+.card-explanation{padding-bottom:12px}.card-explanation p{padding:0 0 5px}.source-link{display:inline-block;margin-top:15px;color:#a95133;font-size:12px;font-weight:800;text-decoration:underline;text-underline-offset:4px}
+.query-list{font-size:11px;color:#918782;line-height:1.5;margin:-4px 0 14px}
 .skeleton-card{height:410px;border-radius:20px;background:linear-gradient(110deg,#f1f0ed 8%,#faf9f6 18%,#f1f0ed 33%);background-size:200% 100%;animation:skeleton 1.5s linear infinite}
 @keyframes skeleton{to{background-position-x:-200%}}
 .results-empty{min-height:345px;border:1px solid #eae6e0;border-radius:22px;background:radial-gradient(circle at 50% 0,#fff8f2 0,#fff 52%);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:45px 24px}

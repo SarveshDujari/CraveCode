@@ -4,7 +4,9 @@ import { readFile, stat } from "node:fs/promises";
 import { extname, join, resolve, sep } from "node:path";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
+import * as Sentry from "@sentry/node";
 import { mealBriefSchema } from "../shared/contracts.ts";
+import { runMealWorkflow } from "./workflow.ts";
 import { getDatabase, initializeDatabase, closeDatabase } from "./db.ts";
 import {
   beginSwiggyConnection,
@@ -22,6 +24,9 @@ const port = Number(process.env.PORT || 8787);
 const publicOrigin = new URL(process.env.PUBLIC_ORIGIN || process.env.RENDER_EXTERNAL_URL || "http://localhost:5173");
 const swiggyLocalEnabled = process.env.RENDER !== "true" && ["localhost", "127.0.0.1"].includes(publicOrigin.hostname);
 const distRoot = resolve(process.cwd(), "dist");
+if (process.env.SENTRY_DSN) Sentry.init({ dsn: process.env.SENTRY_DSN, tracesSampleRate: 1, defaultIntegrations: false });
+let webSearchWindowStart = Date.now();
+let webSearchesThisHour = 0;
 
 function requestOrigin(request: IncomingMessage): URL {
   const host = request.headers.host || "";
@@ -117,7 +122,7 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
   const pathname = url.pathname;
 
   if (method === "GET" && pathname === "/api/health") {
-    json(response, 200, { ok: true, service: "mealpilot", phase: 1 });
+    json(response, 200, { ok: true, service: "mealpilot", phase: 2 });
     return;
   }
   if (method === "GET" && pathname === "/api/system") {
@@ -126,7 +131,8 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
       mongo: getDatabase() ? "connected" : "not-configured",
       gemma: process.env.GEMMA_API_URL && process.env.GEMMA_MODEL ? "configured" : "not-configured",
       swiggy: session?.client ? "connected" : "not-connected",
-      swiggyLocalEnabled
+      swiggyLocalEnabled,
+      webSearch: process.env.SERPAPI_API_KEY ? "configured" : "not-configured"
     });
     return;
   }
@@ -141,6 +147,39 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
       return;
     }
     json(response, 200, { brief: parsed.data, readyForLiveSearch: Boolean(parsed.data.addressId), source: "validated-brief" });
+    return;
+  }
+
+  if (method === "POST" && pathname === "/api/meal-search") {
+    if (!allowedOrigin(request)) { json(response, 403, { error: "Invalid request origin." }); return; }
+    const parsed = mealBriefSchema.safeParse(await body(request));
+    if (!parsed.success) { json(response, 400, { error: "Check your meal targets and try again." }); return; }
+    const brief = parsed.data;
+    const session = getSwiggySession(cookie(request, "mealpilot_session"));
+    let result;
+    if (swiggyLocalEnabled && session?.client && !brief.addressId) {
+      json(response, 400, { error: "Choose a saved delivery address before searching live Swiggy menus." }); return;
+    }
+    if (swiggyLocalEnabled && session?.client && brief.addressId) {
+      result = await Sentry.startSpan({ name: "meal.search.request", op: "meal.search" }, () => runMealWorkflow(brief, { source: "swiggy", searchMenu: (query, vegOnly) => searchMenu(session, brief.addressId!, query, vegOnly) }));
+    } else {
+      if (!brief.city.trim()) { json(response, 400, { error: swiggyLocalEnabled ? "Connect Swiggy and choose an address to search live menus." : "Enter your city for public web discovery." }); return; }
+      if (!process.env.SERPAPI_API_KEY) { json(response, 503, { error: "Public web search is being connected. Please check back shortly." }); return; }
+      if (Date.now() - webSearchWindowStart > 3_600_000) { webSearchWindowStart = Date.now(); webSearchesThisHour = 0; }
+      if (++webSearchesThisHour > 30) { json(response, 429, { error: "Public search is at its hourly limit. Please try later." }); return; }
+      result = await Sentry.startSpan({ name: "meal.search.request", op: "meal.search" }, () => runMealWorkflow(brief, { source: "web" }));
+    }
+    if (getDatabase()) {
+      try {
+        const { addressId: _addressId, wish: _wish, ...savedBrief } = brief;
+        await getDatabase()!.collection("meal_jobs").insertOne({ requestId: result.jobId, userId: session?.id || "public", brief: savedBrief, source: result.source, queries: result.queries, status: "complete", createdAt: new Date(result.searchedAt) });
+        if (result.results.length) await getDatabase()!.collection("candidates").insertMany(result.results.map(candidate => ({ ...candidate, jobId: result.jobId, observedAt: new Date(result.searchedAt) })));
+      } catch (error) {
+        console.error(`Could not save search ${result.jobId}: ${error instanceof Error ? error.message : "database error"}`);
+        result.warnings.push("Search results could not be saved for later review.");
+      }
+    }
+    json(response, 200, result);
     return;
   }
 
@@ -218,6 +257,7 @@ const server = createServer((request, response) => {
     const requestId = randomUUID();
     const message = error instanceof Error ? error.message : "Unexpected error";
     console.error(`[${requestId}] ${message}`);
+    if (process.env.SENTRY_DSN) Sentry.captureException(error);
     if (!response.headersSent) json(response, error instanceof z.ZodError ? 400 : 502, { error: message, requestId });
   });
 });

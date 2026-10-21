@@ -4,6 +4,8 @@ This roadmap turns the [system architecture](./ARCHITECTURE.md) and [frontend de
 
 **Current execution decision:** The deployed shell and authenticated local Swiggy menu search establish the discovery foundation. The first cart test did not work; its exact failure has not been diagnosed. Cart preparation is deferred to Phase 3 so Phase 2 can prioritize finding, verifying, and ranking useful meals. This does not count as a passed cart integration gate.
 
+**Phase 2 implementation status:** The optional dish form, bounded multi-query planner, Mastra search workflow, provisional live ranking, SerpApi public web-lead path, optional Atlas writes, and Sentry stage spans are implemented. See [PHASE2_STATUS.md](./PHASE2_STATUS.md) for what is verified and what still needs credentials, nutrition evidence, or Swiggy approval. The Phase 2 exit gate is not yet fully met.
+
 ## Scope we protect throughout
 
 The first release handles one selected Swiggy delivery address, one restaurant per proposed cart, and at most two items per candidate. A user enters an all-in budget, diet, protein and calorie targets, and optional cuisine. The system finds available meals, distinguishes documented nutrition from estimates or unknowns, explains tradeoffs, and prepares **one selected cart** after explicit user action. Checkout remains with Swiggy. Price is provisional until the cart is read back.

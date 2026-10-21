@@ -3,7 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "engines": { "node": ">=24" },
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "dev:api": "tsx watch src/server/index.ts",
@@ -14,7 +16,9 @@
     "gemma:probe": "tsx src/server/gemma-probe.ts"
   },
   "dependencies": {
+    "@mastra/core": "^1.79.0",
     "@modelcontextprotocol/client": "^2.3.1",
+    "@sentry/node": "^11.8.0",
     "dotenv": "^18.0.8",
     "mongodb": "^7.7.0",
     "react": "^19.3.1",
