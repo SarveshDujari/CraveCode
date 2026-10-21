@@ -2,7 +2,7 @@
 
 CraveCode is a meal-discovery agent in progress. Give it a budget, diet, protein and calorie targets, and optional food preferences. The Phase 2 engine searches several goal-aware dish themes, ranks live Swiggy menu items locally, and explains what is and is not verified. It never places an order automatically.
 
-The project is being built in [four phases](./FOUR_PHASE_ROADMAP.md). The [architecture](./ARCHITECTURE.md) and [frontend design](./FRONTEND_DESIGN.md) set the constraints for later work. **Phase 2's search workflow is implemented, but public search still needs the owner's SerpApi key and live Swiggy OAuth still needs production approval. Nutrition matching and cart preparation remain open.**
+The project is being built in [four phases](./FOUR_PHASE_ROADMAP.md). The [architecture](./ARCHITECTURE.md) and [frontend design](./FRONTEND_DESIGN.md) set the constraints for later work. **Phase 2's search workflow runs locally and on Render. Public search has a configured SerpApi key; public Swiggy OAuth still needs production approval. Nutrition-source matching and cart preparation remain open.**
 
 The implemented frontend has a white hero with eight floating food illustrations, a black meal-brief section, and a white results area. A dish is optional. A signed-in local Swiggy search returns ranked live menu cards. The hosted site uses SerpApi for clearly labeled public web leads by city once configured; these are not verified deliverable menu items.
 
@@ -72,6 +72,6 @@ The live preview is [cravecode.onrender.com](https://cravecode.onrender.com/). T
 - Typed meal, candidate, evidence, and cart-audit contracts.
 - Node API serving the built frontend, validating briefs, running a Mastra search workflow, and providing local Swiggy OAuth/menu/cart integration paths.
 - Optional Atlas connection and indexes, plus a local Gemma structured-output probe.
-- Authenticated local Swiggy address selection and menu search were observed with 10 real item cards before the Phase 2 changes. The new ranked flow has unit/workflow tests, but needs another signed-in live check after restart. Cart read-back remains unverified. No invented nutrition values or all-in price claims.
+- Authenticated local Swiggy address selection and menu search were observed with 10 real item cards before the Phase 2 changes. The owner signed in again and confirmed ranked live cards with the optional dish field empty. Render revision 3 returned three relevant Bengaluru paneer web leads in one live check. Cart read-back remains unverified. No invented nutrition values or all-in price claims.
 
 See [PHASE1_STATUS.md](./PHASE1_STATUS.md) for the checks completed in this workspace and the external gates still open.

@@ -104,7 +104,7 @@ If schedule compresses, cut in this order: extra cuisine filters, saved-history 
 
 ## Immediate next actions
 
-1. Confirm the Swiggy staging/local integration steps and production-access path; this is the project’s largest external dependency.
-2. Scaffold the app and API with the typed meal request, candidate, and cart-audit models.
-3. Build the static version of the frontend from the design plan, so backend work has a real interface to feed.
-4. Run the first end-to-end menu-to-cart spike before expanding agent search or scroll polish.
+1. Apply for Swiggy Builders production access with the public callback URL. Keep public sign-in disabled until encrypted, durable per-user sessions are ready.
+2. Configure Atlas and test saved search jobs, then connect a hosted Gemma endpoint and collect representative evaluation cases.
+3. Add exact restaurant/item/portion nutrition-source matching and measure coverage before calling any candidate a macro match.
+4. Diagnose the deferred cart probe in Phase 3 and prove both a verified cart total and the failure paths before exposing cart preparation.
