@@ -72,6 +72,6 @@ The live preview is [cravecode.onrender.com](https://cravecode.onrender.com/). T
 - Typed meal, candidate, evidence, and cart-audit contracts.
 - Node API serving the built frontend, validating briefs, running a Mastra search workflow, and providing local Swiggy OAuth/menu/cart integration paths.
 - Optional Atlas connection and indexes, plus a local Gemma structured-output probe.
-- Authenticated local Swiggy address selection and menu search were observed with 10 real item cards before the Phase 2 changes. The owner signed in again and confirmed ranked live cards with the optional dish field empty. Render revision 3 returned three relevant Bengaluru paneer web leads in one live check. Cart read-back remains unverified. No invented nutrition values or all-in price claims.
+- Authenticated local Swiggy address selection and menu search were observed with 10 real item cards before the Phase 2 changes. The owner signed in again and confirmed ranked live cards with the optional dish field empty. Render revision 5 returned 11 restaurant-page leads for one Bengaluru vegetarian/high-protein search after filtering directory pages; this is a sample, not a coverage guarantee. Cart read-back remains unverified. No invented nutrition values or all-in price claims.
 
 See [PHASE1_STATUS.md](./PHASE1_STATUS.md) for the checks completed in this workspace and the external gates still open.
