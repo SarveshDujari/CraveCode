@@ -151,6 +151,10 @@ export function App() {
   const [moreMessage, setMoreMessage] = useState("");
 
   useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("swiggy") === "registration-unavailable") {
+      setFormMessage("Swiggy rejected the local connection before sign-in. Your account was not accessed. Please retry later; if it keeps happening, the registration service needs Swiggy’s help.");
+      window.history.replaceState(null, "", `${window.location.pathname}${window.location.hash}`);
+    }
     void readApi<SystemStatus>("/api/system").then(setSystem).catch(() => setSystem(null));
   }, []);
 

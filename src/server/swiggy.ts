@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { readFileSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   Client,
   StreamableHTTPClientTransport,
@@ -13,6 +15,33 @@ import {
 import type { PreviewMenuItem, RestaurantSignal } from "../shared/contracts.ts";
 
 const endpoint = new URL("https://mcp.swiggy.com/food");
+const registrationFile = resolve(process.cwd(), ".swiggy-oauth-registration.json");
+type PublicRegistration = { issuer: string; redirectUrl: string; clientId: string };
+
+function loadRegistrations(): PublicRegistration[] {
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(registrationFile, "utf8"));
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((entry): entry is PublicRegistration =>
+      typeof entry?.issuer === "string" && typeof entry?.redirectUrl === "string" && typeof entry?.clientId === "string");
+  } catch { return []; }
+}
+
+const publicRegistrations = loadRegistrations();
+
+function savedClient(issuer: string, redirectUrl: string): StoredOAuthClientInformation | undefined {
+  const saved = publicRegistrations.find(entry => entry.issuer === issuer && entry.redirectUrl === redirectUrl);
+  return saved ? { client_id: saved.clientId, issuer } : undefined;
+}
+
+function rememberClient(issuer: string, redirectUrl: string, clientId: string): void {
+  const index = publicRegistrations.findIndex(entry => entry.issuer === issuer && entry.redirectUrl === redirectUrl);
+  const next = { issuer, redirectUrl, clientId };
+  if (index < 0) publicRegistrations.push(next); else publicRegistrations[index] = next;
+  try {
+    writeFileSync(registrationFile, JSON.stringify(publicRegistrations), { encoding: "utf8", mode: 0o600 });
+  } catch { /* In-memory reuse still works when local storage is unavailable. */ }
+}
 
 type JsonObject = Record<string, unknown>;
 
@@ -61,11 +90,14 @@ class BrowserOAuthProvider implements OAuthClientProvider {
   }
 
   clientInformation(ctx?: OAuthClientInformationContext): StoredOAuthClientInformation | undefined {
-    return ctx ? this.registrations.get(ctx.issuer) : undefined;
+    return ctx ? this.registrations.get(ctx.issuer) || savedClient(ctx.issuer, this.redirectUrl) : undefined;
   }
 
   saveClientInformation(info: StoredOAuthClientInformation, ctx?: OAuthClientInformationContext): void {
-    if (ctx) this.registrations.set(ctx.issuer, info);
+    if (ctx) {
+      this.registrations.set(ctx.issuer, info);
+      rememberClient(ctx.issuer, this.redirectUrl, info.client_id);
+    }
   }
 
   tokens(): StoredOAuthTokens | undefined {
@@ -142,8 +174,23 @@ export function getSwiggySession(id: string | undefined): SwiggySession | undefi
   return session;
 }
 
+export function discardSwiggySession(id: string): void {
+  const session = sessions.get(id);
+  if (!session) return;
+  sessions.delete(id);
+  void session.client?.close();
+  void session.pendingTransport?.close();
+}
+
 function newClient(): Client {
   return new Client({ name: "mealpilot", version: "0.1.0" });
+}
+
+export class SwiggyRegistrationUnavailableError extends Error {
+  constructor() {
+    super("Swiggy rejected local client registration before sign-in.");
+    this.name = "SwiggyRegistrationUnavailableError";
+  }
 }
 
 export async function beginSwiggyConnection(session: SwiggySession): Promise<URL> {
@@ -155,6 +202,9 @@ export async function beginSwiggyConnection(session: SwiggySession): Promise<URL
     session.client = client;
     return new URL(session.provider.redirectUrl);
   } catch (error) {
+    if (error instanceof Error && /Dynamic Client Registration rejected|client registration failed/i.test(error.message)) {
+      throw new SwiggyRegistrationUnavailableError();
+    }
     if (!(error instanceof UnauthorizedError) || !session.provider.authorizationUrl) throw error;
     return session.provider.authorizationUrl;
   }

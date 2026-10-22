@@ -46,6 +46,8 @@ The experimental cart-probe endpoint asks for explicit confirmation, rechecks th
 
 Swiggy OAuth is deliberately limited to localhost. Sessions and tokens are held in server memory and vanish on restart. Before a public multiuser release, move these into per-user encrypted storage, add proper session management, and complete Swiggy's production-access review. See the [Swiggy developer quickstart](https://mcp.swiggy.com/builders/docs/start/developer/) and [authentication guide](https://mcp.swiggy.com/builders/docs/start/authenticate/).
 
+The local app now reuses the public OAuth client ID after a successful Swiggy registration, including across server restarts. It stores only the client ID and matching redirect URI in ignored `.swiggy-oauth-registration.json`; **user access tokens remain in memory**. This avoids registering a new client on every reconnect. If Swiggy rejects the first registration before phone sign-in, the form displays a clear error. That rejection must be resolved by Swiggy's registration service or developer access; the app cannot manufacture a client ID or skip OAuth. Avoid repeated connection attempts during a 429/rate limit and use [Swiggy Builders support](https://mcp.swiggy.com/builders/docs/operate/support/) if the rejection persists.
+
 ## Configuration
 
 | Variable | Use |

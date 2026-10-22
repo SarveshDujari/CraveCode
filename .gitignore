@@ -6,4 +6,5 @@ dist-server/
 .vite/
 coverage/
 *.log
+.swiggy-oauth-registration.json
 .tools/

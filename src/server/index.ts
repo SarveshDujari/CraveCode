@@ -15,6 +15,7 @@ import { getDemoSession, SearchBudgetError, takeDemoSearch } from "./search-budg
 import {
   beginSwiggyConnection,
   createSwiggySession,
+  discardSwiggySession,
   finishSwiggyConnection,
   getAddresses,
   getCart,
@@ -22,7 +23,8 @@ import {
   inspectCartTool,
   probeSimpleCart,
   searchMenu,
-  searchRestaurants
+  searchRestaurants,
+  SwiggyRegistrationUnavailableError
 } from "./swiggy.ts";
 
 const port = Number(process.env.PORT || 8787);
@@ -133,7 +135,7 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
   const pathname = url.pathname;
 
   if (method === "GET" && pathname === "/api/health") {
-    json(response, 200, { ok: true, service: "mealpilot", phase: 2, searchRevision: 7, commit: process.env.RENDER_GIT_COMMIT?.slice(0, 7) || null });
+    json(response, 200, { ok: true, service: "mealpilot", phase: 2, searchRevision: 8, commit: process.env.RENDER_GIT_COMMIT?.slice(0, 7) || null });
     return;
   }
   if (method === "GET" && pathname === "/api/system") {
@@ -264,8 +266,14 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
     }
     if (method === "GET" && pathname === "/api/swiggy/connect") {
       const session = createSwiggySession(new URL("/api/swiggy/callback", requestOrigin(request)).toString());
-      const authorizationUrl = await beginSwiggyConnection(session);
-      redirect(response, authorizationUrl.toString(), sessionCookie(session.id));
+      try {
+        const authorizationUrl = await beginSwiggyConnection(session);
+        redirect(response, authorizationUrl.toString(), sessionCookie(session.id));
+      } catch (error) {
+        discardSwiggySession(session.id);
+        if (!(error instanceof SwiggyRegistrationUnavailableError)) throw error;
+        redirect(response, "/?swiggy=registration-unavailable#meal-brief");
+      }
       return;
     }
     const session = getSwiggySession(cookie(request, "mealpilot_session"));
