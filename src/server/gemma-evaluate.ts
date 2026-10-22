@@ -35,7 +35,8 @@ let totalLatencyMs = 0;
 for (const item of cases) {
   const baseline = planQueries(item.brief);
   const start = performance.now();
-  const extra = await suggestAdditionalQueries(item.brief, baseline);
+  const plan = await suggestAdditionalQueries(item.brief, baseline);
+  const extra = plan.queries;
   const suggested = [...baseline, ...extra];
   const latencyMs = Math.round(performance.now() - start);
   const baseScore = proxyHits(baseline, item.plausibleMenuNames);
@@ -43,6 +44,6 @@ for (const item of cases) {
   baselineHits += baseScore;
   gemmaHits += gemmaScore;
   totalLatencyMs += latencyMs;
-  console.log(JSON.stringify({ case: item.name, baseline, extra, baselineHits: baseScore, expandedHits: gemmaScore, latencyMs }));
+  console.log(JSON.stringify({ case: item.name, baseline, extra, planner: plan.planner, baselineHits: baseScore, expandedHits: gemmaScore, latencyMs }));
 }
 console.log(JSON.stringify({ sampleCases: cases.length, baselineHits, expandedHits: gemmaHits, additionalProxyHits: gemmaHits - baselineHits, averagePlannerLatencyMs: Math.round(totalLatencyMs / cases.length), note: "Offline menu-name proxy only; confirm actual Swiggy relevance in the signed-in local demo before claiming a gain." }));

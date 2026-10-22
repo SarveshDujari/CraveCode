@@ -133,7 +133,7 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
   const pathname = url.pathname;
 
   if (method === "GET" && pathname === "/api/health") {
-    json(response, 200, { ok: true, service: "mealpilot", phase: 2, searchRevision: 6, commit: process.env.RENDER_GIT_COMMIT?.slice(0, 7) || null });
+    json(response, 200, { ok: true, service: "mealpilot", phase: 2, searchRevision: 7, commit: process.env.RENDER_GIT_COMMIT?.slice(0, 7) || null });
     return;
   }
   if (method === "GET" && pathname === "/api/system") {
@@ -237,19 +237,23 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
     const addressId = search.brief.addressId;
     if (!addressId) { json(response, 400, { error: "Choose a saved delivery address first." }); return; }
     const additional = await suggestAdditionalQueries(search.brief, search.queries);
-    if (!additional.length) { json(response, 200, { queries: [], results: [], message: "Gemma did not find a safe new dish idea for this brief. Your original choices are unchanged." }); return; }
+    if (!additional.queries.length) { json(response, 200, { queries: [], results: [], message: "No new dish themes fit this brief. Try clearing the optional dish or cuisine to explore more." }); return; }
     const demo = await getDemoSession(cookie(request, "cravecode_demo"));
     if (demo.isNew) response.setHeader("Set-Cookie", demoCookie(demo.id));
     await takeDemoSearch(demo.id);
     const explored = await searchWithSwiggy(search.brief,
-      (query, vegOnly) => searchMenu(session, addressId, query, vegOnly), additional,
+      (query, vegOnly) => searchMenu(session, addressId, query, vegOnly), additional.queries,
       query => searchRestaurants(session, addressId, query));
     const newItems = explored.results.filter(item => !search.resultIds.has(item.id)).slice(0, 5);
     for (const item of newItems) search.resultIds.add(item.id);
-    search.queries.push(...additional);
-    json(response, 200, { queries: additional, results: newItems, message: newItems.length
-      ? `Gemma's new dish idea found ${newItems.length} additional menu choice${newItems.length === 1 ? "" : "s"}.`
-      : "Gemma's dish idea did not find a new menu choice this time." });
+    search.queries.push(...additional.queries);
+    const planner = additional.planner === "gemma" ? "Gemma picked" : "Rule-based backup picked";
+    const tried = additional.queries.join(", ");
+    const outcome = newItems.length
+      ? `${newItems.length} new menu choice${newItems.length === 1 ? "" : "s"} found.`
+      : "Swiggy returned no new menu choices for those dishes.";
+    const failures = explored.warnings.length ? ` ${explored.warnings.join(" ")}` : "";
+    json(response, 200, { queries: additional.queries, results: newItems, message: `${planner} ${tried}. ${outcome}${failures}` });
     return;
   }
 

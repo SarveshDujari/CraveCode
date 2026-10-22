@@ -3,7 +3,7 @@ import test from "node:test";
 import { mealBriefSchema, type PreviewMenuItem } from "../shared/contracts.ts";
 import { planQueries, searchWithSwiggy, searchWithWeb } from "./meal-search.ts";
 import { runMealWorkflow } from "./workflow.ts";
-import { filterAdditionalIdeas } from "./gemma-planner.ts";
+import { filterAdditionalIdeas, suggestAdditionalQueries } from "./gemma-planner.ts";
 
 const brief = mealBriefSchema.parse({ diet: "vegetarian", goal: "high-protein", minProteinG: 35, maxCaloriesKcal: 700, budgetInr: 350 });
 const item = (name: string, id: string, overrides: Partial<PreviewMenuItem> = {}): PreviewMenuItem => ({
@@ -144,6 +144,49 @@ test("Gemma expansion accepts only a new permitted dish matching the brief", () 
   assert.deepEqual(filterAdditionalIdeas(brief, ["paneer tikka"], ["Indian food delivery", "rajma", "chicken tikka"]), ["rajma"]);
   assert.deepEqual(filterAdditionalIdeas({ ...brief, dish: "dosa" }, ["dosa"], ["rajma"]), []);
   assert.deepEqual(filterAdditionalIdeas({ ...brief, goal: "lighter", wish: "no tofu" }, ["salad"], ["tofu bowl", "sprouts chaat"]), ["sprouts chaat"]);
+  assert.deepEqual(filterAdditionalIdeas({ ...brief, cuisine: "Gujarati" }, ["paneer tikka"], ["rajma"]), ["rajma"]);
+});
+
+test("Gemma expansion falls back to safe themes when the model is unavailable", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalUrl = process.env.GEMMA_API_URL;
+  const originalModel = process.env.GEMMA_MODEL;
+  const originalRender = process.env.RENDER;
+  try {
+    delete process.env.RENDER;
+    process.env.GEMMA_API_URL = "http://localhost:11436/api/generate";
+    process.env.GEMMA_MODEL = "gemma3:270m";
+    globalThis.fetch = (async () => new Response(null, { status: 503 })) as typeof fetch;
+    const plan = await suggestAdditionalQueries(brief, planQueries(brief));
+    assert.equal(plan.planner, "fallback");
+    assert.deepEqual(plan.queries, ["rajma", "dal makhani", "paneer bhurji"]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalUrl === undefined) delete process.env.GEMMA_API_URL; else process.env.GEMMA_API_URL = originalUrl;
+    if (originalModel === undefined) delete process.env.GEMMA_MODEL; else process.env.GEMMA_MODEL = originalModel;
+    if (originalRender === undefined) delete process.env.RENDER; else process.env.RENDER = originalRender;
+  }
+});
+
+test("Gemma can select several novel diet-safe dish themes", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalUrl = process.env.GEMMA_API_URL;
+  const originalModel = process.env.GEMMA_MODEL;
+  const originalRender = process.env.RENDER;
+  try {
+    delete process.env.RENDER;
+    process.env.GEMMA_API_URL = "http://localhost:11436/api/generate";
+    process.env.GEMMA_MODEL = "gemma3:270m";
+    globalThis.fetch = (async () => new Response(JSON.stringify({ response: JSON.stringify({ queries: ["rajma", "chicken tikka", "paneer bhurji", "dal makhani"] }) }), { status: 200 })) as typeof fetch;
+    const plan = await suggestAdditionalQueries(brief, ["paneer tikka"]);
+    assert.equal(plan.planner, "gemma");
+    assert.deepEqual(plan.queries, ["rajma", "paneer bhurji", "dal makhani"]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalUrl === undefined) delete process.env.GEMMA_API_URL; else process.env.GEMMA_API_URL = originalUrl;
+    if (originalModel === undefined) delete process.env.GEMMA_MODEL; else process.env.GEMMA_MODEL = originalModel;
+    if (originalRender === undefined) delete process.env.RENDER; else process.env.RENDER = originalRender;
+  }
 });
 
 test("restaurant quality favors a substantiated rating over a slightly higher thin rating", async () => {

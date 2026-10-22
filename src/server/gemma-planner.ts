@@ -58,7 +58,8 @@ const additionalIdeas: Record<MealBrief["diet"], string[]> = {
   "egg-friendly": ["egg bhurji", "egg salad", "egg wrap", "rajma", "paneer bhurji", "idli sambar"],
   any: ["chicken tikka", "chicken rice bowl", "grilled fish", "egg bhurji", "rajma", "paneer bhurji"]
 };
-const additionalCache = new Map<string, { at: number; queries: string[] }>();
+export type AdditionalQueryPlan = { queries: string[]; planner: "gemma" | "fallback" };
+const additionalCache = new Map<string, { at: number; plan: AdditionalQueryPlan }>();
 
 function eligibleIdeas(brief: MealBrief): string[] {
   if (brief.dish.trim()) return [];
@@ -67,9 +68,10 @@ function eligibleIdeas(brief: MealBrief): string[] {
   if (brief.goal === "high-protein") ideas = ideas.filter(value => !/idli|sandwich/i.test(value));
   if (brief.mealSlot === "breakfast") ideas = ideas.filter(value => /egg|idli|sprouts|sandwich|bhurji/i.test(value));
   const cuisine = brief.cuisine.toLowerCase();
-  if (/south indian/.test(cuisine)) ideas = ideas.filter(value => /idli/.test(value));
-  if (/punjabi/.test(cuisine)) ideas = ideas.filter(value => /rajma|dal makhani|paneer/.test(value));
-  if (cuisine && !/south indian|punjabi/.test(cuisine)) return [];
+  // A cuisine preference should influence ordering, not make exploration fail
+  // when the small allowlist lacks a perfect match for that cuisine.
+  const preferred = /south indian/.test(cuisine) ? /idli/ : /punjabi|north indian/.test(cuisine) ? /rajma|dal makhani|paneer/ : null;
+  if (preferred) ideas = [...ideas.filter(value => preferred.test(value)), ...ideas.filter(value => !preferred.test(value))];
   return ideas;
 }
 
@@ -79,35 +81,38 @@ export function filterAdditionalIdeas(brief: MealBrief, previousQueries: string[
   const excluded = [...brief.wish.toLowerCase().matchAll(/\b(?:no|without|exclude)\s+([a-z][a-z -]{1,25}?)(?=,|\.|;|$|\band\b)/g)].map(match => match[1].trim());
   return [...new Set(suggestions.map(value => value.toLowerCase().trim()))]
     .filter(value => allowed.includes(value) && !previous.has(value) && !excluded.some(term => value.includes(term)))
-    .slice(0, 1);
+    .slice(0, 3);
 }
 
-export async function suggestAdditionalQueries(brief: MealBrief, previousQueries: string[]): Promise<string[]> {
-  if (process.env.RENDER === "true" || !process.env.GEMMA_API_URL || !process.env.GEMMA_MODEL) return [];
+export async function suggestAdditionalQueries(brief: MealBrief, previousQueries: string[]): Promise<AdditionalQueryPlan> {
+  if (process.env.RENDER === "true") return { queries: [], planner: "fallback" };
   const choices = eligibleIdeas(brief).filter(value => !previousQueries.some(previous => previous.toLowerCase().trim() === value));
-  if (!choices.length) return [];
+  if (!choices.length) return { queries: [], planner: "fallback" };
+  const fallback: AdditionalQueryPlan = { queries: filterAdditionalIdeas(brief, previousQueries, choices.slice(0, 3)), planner: "fallback" };
+  if (!process.env.GEMMA_API_URL || !process.env.GEMMA_MODEL) return fallback;
   const cacheKey = JSON.stringify([brief.diet, brief.goal, brief.mealSlot, brief.cuisine, brief.wish, previousQueries]);
   const cached = additionalCache.get(cacheKey);
-  if (cached && Date.now() - cached.at < 10 * 60_000) return cached.queries;
+  if (cached && Date.now() - cached.at < 10 * 60_000) return cached.plan;
   try {
     const response = await fetch(process.env.GEMMA_API_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...(process.env.GEMMA_API_KEY ? { Authorization: `Bearer ${process.env.GEMMA_API_KEY}` } : {}) },
       body: JSON.stringify({
         model: process.env.GEMMA_MODEL, stream: false,
-        format: { type: "object", properties: { queries: { type: "array", minItems: 1, maxItems: 1, items: { type: "string", enum: choices } } }, required: ["queries"], additionalProperties: false },
-        system: "Choose exactly one specific dish name from the supplied options that best fits the user's meal, goal, cuisine, and wishes. Return only JSON with queries array. Never invent nutrition numbers.",
+        format: { type: "object", properties: { queries: { type: "array", minItems: 1, maxItems: 3, items: { type: "string", enum: choices } } }, required: ["queries"], additionalProperties: false },
+        system: "Choose up to three distinct dish names from the supplied options that best fit the user's meal, goal, cuisine, and wishes. Return only JSON with queries array. Never invent nutrition numbers.",
         prompt: JSON.stringify({ options: choices, meal: brief.mealSlot, goal: brief.goal, cuisine: brief.cuisine, wish: brief.wish, dish: brief.dish }),
-        options: { temperature: 0.1, num_gpu: 0, num_predict: 70 }
+        options: { temperature: 0.1, num_gpu: 0, num_predict: 110 }
       }),
       signal: AbortSignal.timeout(6000)
     });
-    if (!response.ok) return [];
+    if (!response.ok) return fallback;
     const payload = await response.json() as { response?: string };
     const parsed = suggestionsSchema.safeParse(JSON.parse(payload.response || "{}"));
     const selected = parsed.success ? filterAdditionalIdeas(brief, previousQueries, parsed.data.queries) : [];
-    additionalCache.set(cacheKey, { at: Date.now(), queries: selected });
+    const plan: AdditionalQueryPlan = selected.length ? { queries: selected, planner: "gemma" } : fallback;
+    additionalCache.set(cacheKey, { at: Date.now(), plan });
     if (additionalCache.size > 100) additionalCache.delete(additionalCache.keys().next().value!);
-    return selected;
-  } catch { return []; }
+    return plan;
+  } catch { return fallback; }
 }
