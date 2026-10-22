@@ -216,13 +216,22 @@ export async function getAddresses(session: SwiggySession): Promise<Array<{ id: 
 
 export async function searchMenu(session: SwiggySession, addressId: string, query: string, vegOnly: boolean, restaurantId?: string): Promise<PreviewMenuItem[]> {
   if (!session.addressIds.has(addressId)) throw new Error("Choose a saved address first.");
-  const payload = await call(session, "search_menu", {
+  const argumentsBase = {
     addressId,
     query,
     ...(vegOnly ? { vegFilter: 1 } : {}),
     ...(restaurantId ? { restaurantIdOfAddedItem: restaurantId } : {})
-  });
-  const items = Array.isArray(payload.items) ? payload.items : [];
+  };
+  const first = await call(session, "search_menu", argumentsBase);
+  const items = Array.isArray(first.items) ? [...first.items] : [];
+  // One additional page can substantially improve variety without allowing
+  // an unbounded browse of a live menu. A scoped cart recheck stays one page.
+  if (!restaurantId && first.hasMore === true && typeof first.nextOffset === "number" && items.length < 20) {
+    try {
+      const second = await call(session, "search_menu", { ...argumentsBase, offset: first.nextOffset });
+      if (Array.isArray(second.items)) items.push(...second.items);
+    } catch { /* first page remains useful */ }
+  }
   const normalized = items.flatMap(value => {
     const record = object(value);
     const menuItemId = string(record?.menu_item_id);
@@ -242,7 +251,7 @@ export async function searchMenu(session: SwiggySession, addressId: string, quer
     };
     return [item];
   });
-  session.menuItems = new Map(normalized.map(item => [item.menuItemId, item]));
+  for (const item of normalized) session.menuItems.set(item.menuItemId, item);
   return normalized;
 }
 
@@ -260,7 +269,10 @@ export async function searchRestaurants(session: SwiggySession, addressId: strin
       id,
       rating: rating !== null && rating >= 0 && rating <= 5 ? rating : null,
       ratingsText: string(record?.totalRatings),
-      availabilityStatus: status === "OPEN" || status === "CLOSED" || status === "UNAVAILABLE" ? status : null
+      availabilityStatus: status === "OPEN" || status === "CLOSED" || status === "UNAVAILABLE" ? status : null,
+      areaName: string(record?.areaName),
+      distanceKm: finiteNumber(record?.distanceKm),
+      deliveryTimeMinutes: finiteNumber(record?.deliveryTimeMinutes)
     }];
   });
 }

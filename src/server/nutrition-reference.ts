@@ -1,3 +1,5 @@
+import { reserveSerpApiCall } from "./search-budget.ts";
+
 export type NutritionReference = {
   description: string;
   serving: string;
@@ -58,6 +60,7 @@ export async function lookupNutritionReference(dish: string): Promise<NutritionR
   if (cached && Date.now() - cached.checkedAt < cacheMs) return cached.value;
   const apiKey = process.env.SERPAPI_API_KEY;
   if (!apiKey) throw new Error("Nutrition reference search is unavailable.");
+  await reserveSerpApiCall();
   const params = new URLSearchParams({
     engine: "google", q: `${dish} nutrition calories`, gl: "in", hl: "en", num: "3", api_key: apiKey
   });

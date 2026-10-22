@@ -3,6 +3,7 @@ import test from "node:test";
 import { mealBriefSchema, type PreviewMenuItem } from "../shared/contracts.ts";
 import { planQueries, searchWithSwiggy, searchWithWeb } from "./meal-search.ts";
 import { runMealWorkflow } from "./workflow.ts";
+import { filterAdditionalIdeas } from "./gemma-planner.ts";
 
 const brief = mealBriefSchema.parse({ diet: "vegetarian", goal: "high-protein", minProteinG: 35, maxCaloriesKcal: 700, budgetInr: 350 });
 const item = (name: string, id: string, overrides: Partial<PreviewMenuItem> = {}): PreviewMenuItem => ({
@@ -48,6 +49,7 @@ test("public results are labeled as leads with no fabricated price or availabili
     ];
   });
   assert.equal(result.source, "web-leads");
+  assert.equal(queries.length, 1);
   assert.ok(queries.every(query => query.includes("site:swiggy.com/city/bangalore")));
   assert.equal(result.results.length, 1);
   assert.equal(result.results[0].menuPriceInr, null);
@@ -121,4 +123,38 @@ test("live shortlist shows up to 15 items across restaurants", async () => {
   ), ["paneer"]);
   assert.equal(result.results.length, 15);
   assert.equal(new Set(result.results.map(value => value.id.split(":")[0])).size, 5);
+});
+
+test("a broad dish estimate can lower a nutrition-unlikely item without claiming a verified match", async () => {
+  const result = await searchWithSwiggy({ ...brief, minProteinG: 40, maxCaloriesKcal: 200 }, async () => [
+    item("Paneer Tikka", "p1"), item("Unknown Special", "u1")
+  ], ["paneer"]);
+  const paneer = result.results.find(value => value.title === "Paneer Tikka");
+  assert.equal(paneer?.nutritionEstimate?.fit, "unlikely");
+  assert.equal(paneer?.match, "unverified");
+  assert.match(paneer?.cautions.join(" ") || "", /broad dish estimate/);
+});
+
+test("a simple dish estimate does not apply to a composite food without its own profile", async () => {
+  const result = await searchWithSwiggy(brief, async () => [item("Paneer Pizza", "pizza")], ["paneer"]);
+  assert.equal(result.results[0].nutritionEstimate, null);
+});
+
+test("Gemma expansion accepts only a new permitted dish matching the brief", () => {
+  assert.deepEqual(filterAdditionalIdeas(brief, ["paneer tikka"], ["Indian food delivery", "rajma", "chicken tikka"]), ["rajma"]);
+  assert.deepEqual(filterAdditionalIdeas({ ...brief, dish: "dosa" }, ["dosa"], ["rajma"]), []);
+  assert.deepEqual(filterAdditionalIdeas({ ...brief, goal: "lighter", wish: "no tofu" }, ["salad"], ["tofu bowl", "sprouts chaat"]), ["sprouts chaat"]);
+});
+
+test("restaurant quality favors a substantiated rating over a slightly higher thin rating", async () => {
+  const result = await searchWithSwiggy(brief, async () => [
+    item("Paneer Tikka", "thin", { restaurantId: "thin" }),
+    item("Paneer Tikka", "established", { restaurantId: "established" })
+  ], ["paneer"], async () => [
+    { id: "thin", rating: 4.6, ratingsText: "8 ratings", availabilityStatus: "OPEN", distanceKm: 9 },
+    { id: "established", rating: 4.3, ratingsText: "2K+ ratings", availabilityStatus: "OPEN", distanceKm: 2 }
+  ]);
+  assert.equal(result.results[0].id, "established:established");
+  assert.equal(result.results[0].restaurantReview?.ratingsLowerBound, 2000);
+  assert.equal(result.results[1].restaurantReview?.status, "limited-feedback");
 });

@@ -46,9 +46,25 @@ test("restaurant search keeps only documented rating and availability fields", a
     ] };
   });
   assert.deepEqual(await searchRestaurants(session, "a1", "paneer"), [
-    { id: "r1", rating: 4.3, ratingsText: "100+", availabilityStatus: "OPEN" },
-    { id: "r2", rating: null, ratingsText: null, availabilityStatus: null }
+    { id: "r1", rating: 4.3, ratingsText: "100+", availabilityStatus: "OPEN", areaName: null, distanceKm: null, deliveryTimeMinutes: null },
+    { id: "r2", rating: null, ratingsText: null, availabilityStatus: null, areaName: null, distanceKm: null, deliveryTimeMinutes: null }
   ]);
+});
+
+test("menu search loads one extra page and keeps items from earlier queries", async () => {
+  const session = createSwiggySession("http://localhost/callback");
+  session.addressIds.add("a1");
+  session.client = fakeClient((name, args) => {
+    assert.equal(name, "search_menu");
+    if (args.query === "chole") return { items: [{ ...dish, menu_item_id: "chole-1", name: "Chole" }] };
+    if (args.offset === 10) return { items: [{ ...dish, menu_item_id: "paneer-2", name: "Paneer Tikka" }] };
+    return { items: [dish], hasMore: true, nextOffset: 10 };
+  });
+  const result = await searchMenu(session, "a1", "paneer", true);
+  assert.deepEqual(result.map(item => item.menuItemId), ["dish-1", "paneer-2"]);
+  await searchMenu(session, "a1", "chole", true);
+  assert.ok(session.menuItems.has("dish-1"));
+  assert.ok(session.menuItems.has("chole-1"));
 });
 
 test("cart probe refuses an item that gains required customization on scoped recheck", async () => {

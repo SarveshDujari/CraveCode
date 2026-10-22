@@ -1,9 +1,19 @@
 import { randomUUID } from "node:crypto";
 import type { MealBrief, MealResult, MealSearchResponse, PreviewMenuItem, RestaurantSignal } from "../shared/contracts.ts";
+import { estimateNutrition } from "./nutrition-estimate.ts";
+import { reserveSerpApiCall } from "./search-budget.ts";
 
 type SearchMenu = (query: string, vegOnly: boolean) => Promise<PreviewMenuItem[]>;
 type SearchRestaurants = (query: string) => Promise<RestaurantSignal[]>;
 type WebSearch = (query: string) => Promise<Array<{ title: string; url: string; snippet: string; imageUrl: string | null }>>;
+
+function withDeadline<T>(operation: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  return Promise.race([
+    operation,
+    new Promise<T>((_, reject) => { timer = setTimeout(() => reject(new Error("Search source timed out.")), ms); })
+  ]).finally(() => clearTimeout(timer));
+}
 
 const mealTerms: Record<MealBrief["goal"], Record<MealBrief["diet"], string[]>> = {
   "high-protein": {
@@ -33,7 +43,11 @@ export function planQueries(brief: MealBrief): string[] {
   const explicit = brief.dish.trim();
   const cuisine = brief.cuisine.trim();
   const themes = brief.maxCaloriesKcal < 500 ? lowerCalorieSearchThemes[brief.diet] : mealTerms[brief.goal][brief.diet];
-  const terms = explicit ? [explicit, ...themes] : themes;
+  const slotThemes = brief.mealSlot === "breakfast"
+    ? brief.diet === "vegetarian" ? ["idli sambar", "sprouts chaat"] : ["egg bhurji", "idli sambar"]
+    : brief.mealSlot === "snack" ? brief.diet === "vegetarian" ? ["paneer tikka", "sprouts chaat"] : ["egg wrap", "paneer tikka"]
+    : [];
+  const terms = explicit ? [explicit, ...themes] : [...slotThemes, ...themes];
   return [...new Set(terms.map(term => cuisine && !term.toLowerCase().includes(cuisine.toLowerCase()) ? `${cuisine} ${term}` : term))].slice(0, 4);
 }
 
@@ -77,13 +91,22 @@ function rankLive(item: PreviewMenuItem, brief: MealBrief, queries: string[], si
   const matchedWish = wishWords.filter(word => itemWords.has(word)).length;
   const queryMatch = Math.max(...queries.map(query => tokens(query).filter(word => itemWords.has(word)).length), 0);
   const underMenuBudget = item.priceInr !== null && item.priceInr <= brief.budgetInr;
+  const nutritionEstimate = estimateNutrition(item.name, brief);
   const review = reviewStatus(signal);
-  const reviewBoost = brief.preferWellReviewed ? review === "well-reviewed" ? 6 : review === "low-rating" ? -6 : 0 : 0;
-  const score = queryMatch * 5 + matchedDish * 8 + matchedWish * 2 + (underMenuBudget ? 4 : 0) + (item.inStock === true ? 2 : 0) + (item.isVeg === true && brief.diet === "vegetarian" ? 2 : 0) + reviewBoost;
+  const ratingCount = ratingsLowerBound(signal?.ratingsText || null);
+  const supportedRating = signal?.rating !== null && signal?.rating !== undefined && ratingCount !== null
+    ? (signal.rating * ratingCount + 4 * 100) / (ratingCount + 100) : null;
+  const reviewBoost = brief.preferWellReviewed
+    ? review === "low-rating" ? -6 : supportedRating === null ? 0 : Math.round((supportedRating - 4) * 10)
+    : 0;
+  const estimateBoost = nutritionEstimate?.fit === "possible" ? 3 : nutritionEstimate?.fit === "unlikely" ? -5 : 0;
+  const score = queryMatch * 5 + matchedDish * 8 + matchedWish * 2 + (underMenuBudget ? 4 : 0) + (item.inStock === true ? 2 : 0) + (item.isVeg === true && brief.diet === "vegetarian" ? 2 : 0) + reviewBoost + estimateBoost;
   const reasons = [queryMatch ? "Dish name matches a search theme" : "Found in nearby menu search"];
   if (matchedDish) reasons.push("Matches your requested dish");
   if (underMenuBudget) reasons.push("Menu price is within your budget before fees");
-  const cautions = ["Protein and calories are unverified", "Delivery fees and final payable total are unknown"];
+  if (nutritionEstimate?.fit === "possible") reasons.push("A broad dish estimate overlaps your nutrition targets; the restaurant portion is unverified");
+  const cautions = ["Restaurant-specific protein and calories are unverified", "Delivery fees and final payable total are unknown"];
+  if (nutritionEstimate?.fit === "unlikely") cautions.push("Even a broad dish estimate suggests this may miss a nutrition target");
   if (item.isVeg === null) cautions.push("Diet classification is unconfirmed");
   if (item.priceInr === null) cautions.push("Menu price is unavailable");
   else if (item.priceInr > brief.budgetInr) cautions.push("Menu price alone exceeds your total budget");
@@ -97,7 +120,12 @@ function rankLive(item: PreviewMenuItem, brief: MealBrief, queries: string[], si
     diet: item.isVeg === true ? "vegetarian" : item.isVeg === false ? "non-vegetarian" : "unknown",
     availability: item.inStock === true ? "available" : "unknown",
     source: "swiggy-live", sourceUrl: null, searchTheme: null,
-    restaurantReview: signal ? { rating: signal.rating, ratingsText: signal.ratingsText, status: review, source: "swiggy" } : null,
+    restaurantReview: signal ? {
+      rating: signal.rating, ratingsText: signal.ratingsText, ratingsLowerBound: ratingCount, status: review,
+      areaName: signal.areaName || null, distanceKm: signal.distanceKm ?? null,
+      deliveryTimeMinutes: signal.deliveryTimeMinutes ?? null, source: "swiggy"
+    } : null,
+    nutritionEstimate,
     nutritionSources: [], match: "unverified", reasons, cautions, score
   };
 }
@@ -127,8 +155,8 @@ export function rankLiveItems(items: PreviewMenuItem[], brief: MealBrief, querie
 
 export async function searchWithSwiggy(brief: MealBrief, searchMenu: SearchMenu, queries = planQueries(brief), searchRestaurants?: SearchRestaurants): Promise<MealSearchResponse> {
   const [settled, reviewResults] = await Promise.all([
-    Promise.allSettled(queries.map(query => searchMenu(query, brief.diet === "vegetarian"))),
-    searchRestaurants ? Promise.allSettled(queries.slice(0, 2).map(searchRestaurants)) : Promise.resolve([])
+    Promise.allSettled(queries.map(query => withDeadline(searchMenu(query, brief.diet === "vegetarian"), 12_000))),
+    searchRestaurants ? Promise.allSettled(queries.slice(0, 2).map(query => withDeadline(searchRestaurants(query), 10_000))) : Promise.resolve([])
   ]);
   const warnings = settled.flatMap((result, index) => result.status === "rejected" ? [`Search for “${queries[index]}” failed; other results may still be available.`] : []);
   const items = settled.flatMap(result => result.status === "fulfilled" ? result.value : []);
@@ -171,12 +199,16 @@ export async function searchWithWeb(brief: MealBrief, searchWeb: WebSearch, plan
   const queries = plannedQueries.slice(0, 4);
   const city = brief.city.trim();
   if (!city) throw new Error("Enter a city to explore public web results.");
-  const webQueries = queries.map(query => `${query} ${city} order online site:swiggy.com/city/${swiggyCitySlug(city)}`);
+  // One SerpApi request per public click. Returned result count does not spend
+  // extra credits, whereas four independent Google requests would.
+  const alternatives = queries.map(query => `"${query}"`).join(" OR ");
+  const webQueries = [`(${alternatives}) ${city} order online site:swiggy.com/city/${swiggyCitySlug(city)}`];
   const settled = await Promise.allSettled(webQueries.map(searchWeb));
+  if (settled.every(result => result.status === "rejected")) throw (settled[0] as PromiseRejectedResult).reason;
   const warnings = settled.flatMap((result, index) => result.status === "rejected" ? [`Web search for “${queries[index]}” failed.`] : []);
   const seen = new Set<string>();
   const results: MealResult[] = [];
-  for (const [index, result] of settled.entries()) {
+  for (const result of settled) {
     if (result.status !== "fulfilled") continue;
     for (const lead of result.value) {
       if (!validWebUrl(lead.url) || seen.has(lead.url)) continue;
@@ -185,12 +217,16 @@ export async function searchWithWeb(brief: MealBrief, searchWeb: WebSearch, plan
       if (!cityFitsPage(lead.url, city)) continue;
       const pathname = new URL(lead.url).pathname;
       if (domain === "zomato.com" && /\/restaurants\/|\/delivery\/|\/delivery-in-|\/order\/verify|\/dish-/i.test(pathname)) continue;
-      const dishQuery = brief.cuisine && queries[index].toLowerCase().startsWith(brief.cuisine.toLowerCase())
-        ? queries[index].slice(brief.cuisine.length).trim() : queries[index];
-      const queryWords = tokens(dishQuery);
       const pageWords = tokens(`${lead.title} ${lead.snippet} ${new URL(lead.url).pathname}`);
-      if (queryWords[0] && !pageWords.includes(queryWords[0])) continue;
-      const matchCount = queryWords.filter(word => pageWords.includes(word)).length;
+      const matches = queries.map(query => {
+        const dishQuery = brief.cuisine && query.toLowerCase().startsWith(brief.cuisine.toLowerCase())
+          ? query.slice(brief.cuisine.length).trim() : query;
+        const queryWords = tokens(dishQuery);
+        const matchCount = queryWords.filter(word => pageWords.includes(word)).length;
+        return { dishQuery, matchCount, firstWordPresent: !queryWords[0] || pageWords.includes(queryWords[0]) };
+      }).filter(match => match.firstWordPresent).sort((a, b) => b.matchCount - a.matchCount);
+      const bestMatch = matches[0];
+      const matchCount = bestMatch?.matchCount || 0;
       if (matchCount === 0) continue;
       seen.add(lead.url);
       const title = lead.title.trim();
@@ -203,7 +239,7 @@ export async function searchWithWeb(brief: MealBrief, searchWeb: WebSearch, plan
       if (exclusions(brief.wish).some(term => `${title} ${lead.snippet}`.toLowerCase().includes(term))) continue;
       results.push({
         id: lead.url, title, restaurant: domain, imageUrl: lead.imageUrl,
-        menuPriceInr: null, diet: "unknown", availability: "unknown", source: "web-lead", sourceUrl: lead.url, searchTheme: dishQuery, restaurantReview: null,
+        menuPriceInr: null, diet: "unknown", availability: "unknown", source: "web-lead", sourceUrl: lead.url, searchTheme: bestMatch.dishQuery, restaurantReview: null, nutritionEstimate: null,
         nutritionSources: [], match: "unverified", reasons: ["Found on the public web for your city and search theme"],
         cautions: ["This is a search lead, not a verified live menu item", "Price, availability, diet, protein, calories, and delivery fees are unverified"],
         score: matchCount * 5 + (domain === "swiggy.com" ? 2 : 0)
@@ -221,8 +257,9 @@ export async function serpApiSearch(query: string): Promise<Array<{ title: strin
   if (!key) throw new Error("SerpApi is not configured yet.");
   const cached = webCache.get(query);
   if (cached && Date.now() - cached.at < 60 * 60_000) return cached.results;
-  const params = new URLSearchParams({ engine: "google", q: query, gl: "in", hl: "en", num: "10", api_key: key });
-  const response = await fetch(`https://serpapi.com/search.json?${params}`, { signal: AbortSignal.timeout(18000) });
+  await reserveSerpApiCall();
+  const params = new URLSearchParams({ engine: "google", q: query, gl: "in", hl: "en", num: "20", api_key: key });
+  const response = await fetch(`https://serpapi.com/search.json?${params}`, { signal: AbortSignal.timeout(12000) });
   if (!response.ok) throw new Error(`SerpApi search failed (${response.status}).`);
   const payload = await response.json() as { error?: string; organic_results?: Array<{ title?: string; link?: string; snippet?: string; thumbnail?: string }> };
   if (payload.error) throw new Error(payload.error);

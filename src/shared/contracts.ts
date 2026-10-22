@@ -89,13 +89,27 @@ export type RestaurantSignal = {
   rating: number | null;
   ratingsText: string | null;
   availabilityStatus: "OPEN" | "CLOSED" | "UNAVAILABLE" | null;
+  areaName?: string | null;
+  distanceKm?: number | null;
+  deliveryTimeMinutes?: number | null;
 };
 
 export const restaurantReviewSchema = z.object({
   rating: z.number().min(0).max(5).nullable(),
   ratingsText: z.string().nullable(),
+  ratingsLowerBound: z.number().nonnegative().nullable(),
   status: z.enum(["well-reviewed", "limited-feedback", "mixed-rating", "low-rating", "unknown"]),
+  areaName: z.string().nullable(),
+  distanceKm: z.number().nonnegative().nullable(),
+  deliveryTimeMinutes: z.number().nonnegative().nullable(),
   source: z.literal("swiggy")
+});
+
+export const nutritionEstimateSchema = z.object({
+  profile: z.string(), serving: z.string(),
+  caloriesKcal: z.object({ min: z.number().nonnegative(), max: z.number().nonnegative() }),
+  proteinG: z.object({ min: z.number().nonnegative(), max: z.number().nonnegative() }),
+  fit: z.enum(["possible", "unlikely"]), method: z.string(), sourceUrl: z.url()
 });
 
 export const mealResultSchema = z.object({
@@ -106,6 +120,7 @@ export const mealResultSchema = z.object({
   source: z.enum(["swiggy-live", "web-lead"]), sourceUrl: z.url().nullable(),
   searchTheme: z.string().nullable(),
   restaurantReview: restaurantReviewSchema.nullable(),
+  nutritionEstimate: nutritionEstimateSchema.nullable(),
   nutritionSources: z.array(z.object({ title: z.string(), url: z.url() })),
   match: z.enum(["closest", "unverified"]), reasons: z.array(z.string()), cautions: z.array(z.string()), score: z.number()
 });

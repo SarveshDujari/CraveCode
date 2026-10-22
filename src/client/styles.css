@@ -151,6 +151,11 @@ h1,h2,h3,p{margin-top:0}
 .nutrition-reference{margin-top:14px;font-size:11px;line-height:1.5;color:#726c67}
 .nutrition-reference button{border:0;background:none;padding:0;color:#a95133;text-decoration:underline;text-underline-offset:4px;font:inherit;font-weight:800;cursor:pointer}
 .nutrition-reference p{margin:0}
+.gemma-more{margin:25px 0 0;padding:19px 22px;border:1px solid #eae6e0;border-radius:16px;background:#fffaf6;color:#6d625a}
+.gemma-more button{border:0;background:none;padding:0;color:#a95133;font:inherit;font-size:13px;font-weight:800;cursor:pointer;text-decoration:underline;text-underline-offset:4px}
+.gemma-more button:disabled{opacity:.5;cursor:not-allowed}
+.gemma-more small{display:block;margin-top:5px;font-size:11px}
+.gemma-more p{margin:10px 0 0;font-size:12px}
 .nutrition-reference a{color:#a95133;font-weight:800}
 .nutrition-reference small{display:block;margin-top:4px;font-size:10px;color:#8e8882}
 .menu-card-details{border-bottom:1px solid #ebe8e3}

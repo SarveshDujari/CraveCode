@@ -17,7 +17,9 @@ export async function initializeDatabase(): Promise<Db | undefined> {
     database.collection("candidates").createIndex({ jobId: 1 }),
     database.collection("nutrition_claims").createIndex({ restaurantId: 1, menuItemId: 1, observedAt: -1 }),
     database.collection("cart_audits").createIndex({ jobId: 1, consentAt: -1 }),
-    database.collection("preferences").createIndex({ userId: 1 }, { unique: true })
+    database.collection("preferences").createIndex({ userId: 1 }, { unique: true }),
+    database.collection("demo_sessions").createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+    database.collection("serpapi_budgets").createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })
   ]);
 
   return database;

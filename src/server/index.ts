@@ -5,10 +5,13 @@ import { extname, join, resolve, sep } from "node:path";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import * as Sentry from "@sentry/node";
-import { mealBriefSchema } from "../shared/contracts.ts";
+import { mealBriefSchema, type MealBrief } from "../shared/contracts.ts";
 import { runMealWorkflow } from "./workflow.ts";
+import { searchWithSwiggy } from "./meal-search.ts";
+import { suggestAdditionalQueries } from "./gemma-planner.ts";
 import { lookupNutritionReference } from "./nutrition-reference.ts";
 import { getDatabase, initializeDatabase, closeDatabase } from "./db.ts";
+import { getDemoSession, SearchBudgetError, takeDemoSearch } from "./search-budget.ts";
 import {
   beginSwiggyConnection,
   createSwiggySession,
@@ -27,11 +30,9 @@ const publicOrigin = new URL(process.env.PUBLIC_ORIGIN || process.env.RENDER_EXT
 const swiggyLocalEnabled = process.env.RENDER !== "true" && ["localhost", "127.0.0.1"].includes(publicOrigin.hostname);
 const distRoot = resolve(process.cwd(), "dist");
 if (process.env.SENTRY_DSN) Sentry.init({ dsn: process.env.SENTRY_DSN, tracesSampleRate: 1, defaultIntegrations: false });
-let webSearchWindowStart = Date.now();
-let webSearchesThisHour = 0;
 let nutritionSearchWindowStart = Date.now();
 let nutritionSearchesThisHour = 0;
-const recentSearches = new Map<string, { seenAt: number; titles: Map<string, string> }>();
+const recentSearches = new Map<string, { seenAt: number; titles: Map<string, string>; resultIds: Set<string>; brief: MealBrief; swiggySessionId: string | null; queries: string[] }>();
 
 function requestOrigin(request: IncomingMessage): URL {
   const host = request.headers.host || "";
@@ -71,6 +72,11 @@ function cookie(request: IncomingMessage, name: string): string | undefined {
 function sessionCookie(id: string): string {
   const secure = publicOrigin.protocol === "https:" ? "; Secure" : "";
   return `mealpilot_session=${id}; HttpOnly; SameSite=Lax; Path=/; Max-Age=21600${secure}`;
+}
+
+function demoCookie(id: string): string {
+  const secure = publicOrigin.protocol === "https:" ? "; Secure" : "";
+  return `cravecode_demo=${id}; HttpOnly; SameSite=Lax; Path=/${secure}`;
 }
 
 async function body(request: IncomingMessage): Promise<unknown> {
@@ -127,17 +133,20 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
   const pathname = url.pathname;
 
   if (method === "GET" && pathname === "/api/health") {
-    json(response, 200, { ok: true, service: "mealpilot", phase: 2, searchRevision: 5, commit: process.env.RENDER_GIT_COMMIT?.slice(0, 7) || null });
+    json(response, 200, { ok: true, service: "mealpilot", phase: 2, searchRevision: 6, commit: process.env.RENDER_GIT_COMMIT?.slice(0, 7) || null });
     return;
   }
   if (method === "GET" && pathname === "/api/system") {
     const session = getSwiggySession(cookie(request, "mealpilot_session"));
+    const demo = await getDemoSession(cookie(request, "cravecode_demo"));
+    if (demo.isNew) response.setHeader("Set-Cookie", demoCookie(demo.id));
     json(response, 200, {
       mongo: getDatabase() ? "connected" : "not-configured",
-      gemma: process.env.GEMMA_API_URL && process.env.GEMMA_MODEL ? "configured" : "not-configured",
+      gemma: swiggyLocalEnabled && process.env.GEMMA_API_URL && process.env.GEMMA_MODEL ? "configured" : "not-configured",
       swiggy: session?.client ? "connected" : "not-connected",
       swiggyLocalEnabled,
-      webSearch: process.env.SERPAPI_API_KEY ? "configured" : "not-configured"
+      webSearch: process.env.SERPAPI_API_KEY ? "configured" : "not-configured",
+      demoSearchRemaining: demo.remaining
     });
     return;
   }
@@ -165,6 +174,13 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
     if (swiggyLocalEnabled && session?.client && !brief.addressId) {
       json(response, 400, { error: "Choose a saved delivery address before searching live Swiggy menus." }); return;
     }
+    if (!(swiggyLocalEnabled && session?.client && brief.addressId)) {
+      if (!brief.city.trim()) { json(response, 400, { error: swiggyLocalEnabled ? "Connect Swiggy and choose an address to search live menus." : "Enter your city for public web discovery." }); return; }
+      if (!process.env.SERPAPI_API_KEY) { json(response, 503, { error: "Public web search is being connected. Please check back shortly." }); return; }
+    }
+    const demo = await getDemoSession(cookie(request, "cravecode_demo"));
+    if (demo.isNew) response.setHeader("Set-Cookie", demoCookie(demo.id));
+    await takeDemoSearch(demo.id);
     if (swiggyLocalEnabled && session?.client && brief.addressId) {
       result = await Sentry.startSpan({ name: "meal.search.request", op: "meal.search" }, () => runMealWorkflow(brief, {
         source: "swiggy",
@@ -172,11 +188,6 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
         searchRestaurants: query => searchRestaurants(session, brief.addressId!, query)
       }));
     } else {
-      if (!brief.city.trim()) { json(response, 400, { error: swiggyLocalEnabled ? "Connect Swiggy and choose an address to search live menus." : "Enter your city for public web discovery." }); return; }
-      if (!process.env.SERPAPI_API_KEY) { json(response, 503, { error: "Public web search is being connected. Please check back shortly." }); return; }
-      if (Date.now() - webSearchWindowStart > 3_600_000) { webSearchWindowStart = Date.now(); webSearchesThisHour = 0; }
-      // Four Google requests per uncached public search; reserve free-plan throughput for nutrition references.
-      if (++webSearchesThisHour > 10) { json(response, 429, { error: "Public search is at its hourly limit. Please try later." }); return; }
       result = await Sentry.startSpan({ name: "meal.search.request", op: "meal.search" }, () => runMealWorkflow(brief, { source: "web" }));
     }
     if (getDatabase()) {
@@ -189,7 +200,12 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
         result.warnings.push("Search results could not be saved for later review.");
       }
     }
-    recentSearches.set(result.jobId, { seenAt: Date.now(), titles: new Map(result.results.map(item => [item.id, item.searchTheme || item.title])) });
+    recentSearches.set(result.jobId, {
+      seenAt: Date.now(), titles: new Map(result.results.map(item => [item.id, item.searchTheme || item.title])),
+      resultIds: new Set(result.results.map(item => item.id)), brief,
+      swiggySessionId: result.source === "swiggy-live" ? session?.id || null : null,
+      queries: result.queries
+    });
     for (const [id, search] of recentSearches) if (Date.now() - search.seenAt > 30 * 60_000) recentSearches.delete(id);
     json(response, 200, result);
     return;
@@ -206,6 +222,34 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
     if (++nutritionSearchesThisHour > 10) { json(response, 429, { error: "Nutrition lookups are at their hourly limit." }); return; }
     const reference = await lookupNutritionReference(dish);
     json(response, 200, { reference, scope: "generic-food-reference", exactMenuNutrition: false });
+    return;
+  }
+
+  if (method === "POST" && pathname === "/api/gemma/more") {
+    if (!swiggyLocalEnabled) { json(response, 503, { error: "Gemma dish exploration is available in the signed-in local demo only." }); return; }
+    if (!allowedOrigin(request)) { json(response, 403, { error: "Invalid request origin." }); return; }
+    const input = z.object({ jobId: z.uuid() }).parse(await body(request));
+    const session = getSwiggySession(cookie(request, "mealpilot_session"));
+    const search = recentSearches.get(input.jobId);
+    if (!session?.client || !search || search.swiggySessionId !== session.id || Date.now() - search.seenAt > 30 * 60_000) {
+      json(response, 404, { error: "Reconnect Swiggy and run a fresh search before asking Gemma for more ideas." }); return;
+    }
+    const addressId = search.brief.addressId;
+    if (!addressId) { json(response, 400, { error: "Choose a saved delivery address first." }); return; }
+    const additional = await suggestAdditionalQueries(search.brief, search.queries);
+    if (!additional.length) { json(response, 200, { queries: [], results: [], message: "Gemma did not find a safe new dish idea for this brief. Your original choices are unchanged." }); return; }
+    const demo = await getDemoSession(cookie(request, "cravecode_demo"));
+    if (demo.isNew) response.setHeader("Set-Cookie", demoCookie(demo.id));
+    await takeDemoSearch(demo.id);
+    const explored = await searchWithSwiggy(search.brief,
+      (query, vegOnly) => searchMenu(session, addressId, query, vegOnly), additional,
+      query => searchRestaurants(session, addressId, query));
+    const newItems = explored.results.filter(item => !search.resultIds.has(item.id)).slice(0, 5);
+    for (const item of newItems) search.resultIds.add(item.id);
+    search.queries.push(...additional);
+    json(response, 200, { queries: additional, results: newItems, message: newItems.length
+      ? `Gemma's new dish idea found ${newItems.length} additional menu choice${newItems.length === 1 ? "" : "s"}.`
+      : "Gemma's dish idea did not find a new menu choice this time." });
     return;
   }
 
@@ -284,7 +328,7 @@ const server = createServer((request, response) => {
     const message = error instanceof Error ? error.message : "Unexpected error";
     console.error(`[${requestId}] ${message}`);
     if (process.env.SENTRY_DSN) Sentry.captureException(error);
-    if (!response.headersSent) json(response, error instanceof z.ZodError ? 400 : 502, { error: message, requestId });
+    if (!response.headersSent) json(response, error instanceof z.ZodError ? 400 : error instanceof SearchBudgetError ? 429 : 502, { error: message, requestId });
   });
 });
 
