@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { mealBriefSchema, type PreviewMenuItem } from "../shared/contracts.ts";
-import { planQueries, searchWithSwiggy, searchWithWeb } from "./meal-search.ts";
+import { planQueries, rankLiveItems, searchWithSwiggy, searchWithSwiggyAdaptive, searchWithWeb } from "./meal-search.ts";
 import { runMealWorkflow } from "./workflow.ts";
 import { filterAdditionalIdeas, suggestAdditionalQueries } from "./gemma-planner.ts";
 
@@ -15,6 +15,77 @@ test("an empty dish produces bounded goal-aware searches", () => {
   assert.deepEqual(planQueries(brief), ["paneer tikka", "chole", "dal tadka", "soya chaap"]);
   assert.equal(planQueries({ ...brief, dish: "dosa" })[0], "dosa");
   assert.deepEqual(planQueries({ ...brief, maxCaloriesKcal: 400 }), ["grilled paneer", "tofu salad", "sprouts chaat", "dal soup"]);
+});
+
+test("Italian preference uses Italian dish themes instead of prefixed Indian dishes", () => {
+  const italian = { ...brief, cuisine: "Italian" };
+  assert.deepEqual(planQueries(italian), ["pasta", "paneer pasta", "pizza", "lasagna"]);
+  assert.deepEqual(planQueries({ ...italian, goal: "lighter", maxCaloriesKcal: 450 }), ["minestrone", "bruschetta", "pasta", "risotto"]);
+  assert.deepEqual(planQueries({ ...italian, dish: "ravioli" }), ["ravioli", "pasta", "paneer pasta", "pizza"]);
+});
+
+test("Italian live search shows Italian dish names and drops unrelated returned items", async () => {
+  const italian = { ...brief, cuisine: "Italian" };
+  const result = await searchWithSwiggy(italian, async () => [
+    item("Paneer Tikka", "indian"), item("Italian Paneer Tikka", "italian-label-only"),
+    item("Pesto Pasta", "pasta"), item("Margherita Pizza", "pizza")
+  ]);
+  assert.deepEqual(result.results.map(value => value.title).sort(), ["Margherita Pizza", "Pesto Pasta"]);
+  assert.ok(result.results.every(value => value.cautions.some(caution => caution.includes("Cuisine is inferred"))));
+});
+
+test("Italian public discovery needs an Italian dish signal in the lead", async () => {
+  const result = await searchWithWeb({ ...brief, city: "Bengaluru", cuisine: "Italian" }, async () => [
+    { title: "Paneer Tikka", url: "https://www.swiggy.com/city/bangalore/paneer-tikka", snippet: "Order online", imageUrl: null },
+    { title: "Pesto Pasta", url: "https://www.swiggy.com/city/bangalore/pesto-pasta", snippet: "Order online", imageUrl: null }
+  ]);
+  assert.deepEqual(result.results.map(value => value.title), ["Pesto Pasta"]);
+  assert.ok(result.queries.every(value => !value.includes("chole")));
+});
+
+test("adaptive local search fills missing dish families within four menu queries", async () => {
+  const calls: string[] = [];
+  const result = await searchWithSwiggyAdaptive(brief, async query => {
+    calls.push(query);
+    return query === "paneer tikka" ? [item("Paneer Tikka", "p1")]
+      : query === "chole" ? [item("Chole", "c1")]
+      : query === "soya chaap" ? [item("Soya Chaap", "s1")]
+      : [item("Dal Tadka", "d1")];
+  });
+  assert.equal(calls.length, 4);
+  assert.equal(result.queries.length, 4);
+  assert.deepEqual(new Set(result.results.map(value => value.title)), new Set(["Paneer Tikka", "Chole", "Soya Chaap", "Dal Tadka"]));
+});
+
+test("adaptive local search stops early when two queries yield enough variety", async () => {
+  const calls: string[] = [];
+  const result = await searchWithSwiggyAdaptive(brief, async query => {
+    calls.push(query);
+    return Array.from({ length: 12 }, (_, index) => item(
+      index % 3 === 0 ? `Paneer Tikka ${index}` : index % 3 === 1 ? `Paneer Curry ${index}` : `Chole ${index}`,
+      `${query}-${index}`, { restaurantId: `r${index % 4}` }
+    ));
+  });
+  assert.equal(calls.length, 2);
+  assert.equal(result.queries.length, 2);
+  assert.equal(result.results.length, 12);
+});
+
+test("local ranking rejects unrelated dishes, over-budget items, and unrelated explicit dishes", () => {
+  const results = rankLiveItems([
+    item("Masala Dosa", "dosa"),
+    item("Paneer Tikka", "unrelated"),
+    item("Dosa Combo", "expensive", { priceInr: 500 })
+  ], { ...brief, dish: "dosa" }, ["dosa"]);
+  assert.deepEqual(results.map(value => value.title), ["Masala Dosa"]);
+});
+
+test("local ranking accepts a provider category when the dish name is generic", () => {
+  const results = rankLiveItems([
+    item("Creamy White Sauce", "pasta", { category: "Pasta" }),
+    item("Paneer Tikka", "indian", { category: "Italian" })
+  ], { ...brief, cuisine: "Italian" }, ["pasta"]);
+  assert.deepEqual(results.map(value => value.title), ["Creamy White Sauce"]);
 });
 
 test("live search deduplicates, excludes unavailable/nonveg, and never claims an exact macro match", async () => {
@@ -38,6 +109,27 @@ test("egg-friendly and explicit exclusions reject unsuitable dishes", async () =
     item("Mushroom Paneer", "m1")
   ]);
   assert.deepEqual(result.results.map(value => value.title), ["Egg Bowl"]);
+});
+
+test("clear meat names are labeled non-veg when Swiggy omits the diet flag", async () => {
+  const anyDiet = { ...brief, diet: "any" as const };
+  const result = await searchWithSwiggy(anyDiet, async () => [
+    item("Chicken Pasta", "chicken", { isVeg: null }),
+    item("House Pasta Special", "unknown", { isVeg: null }),
+    item("Vegan Mock Chicken Pasta", "mock", { isVeg: null })
+  ], ["pasta"]);
+  assert.equal(result.results.find(value => value.title === "Chicken Pasta")?.diet, "non-vegetarian");
+  assert.match(result.results.find(value => value.title === "Chicken Pasta")?.cautions.join(" ") || "", /inferred from the dish name/);
+  assert.equal(result.results.find(value => value.title === "House Pasta Special")?.diet, "unknown");
+  assert.equal(result.results.find(value => value.title === "Vegan Mock Chicken Pasta")?.diet, "unknown");
+
+  const eggFriendly = await searchWithSwiggy({ ...brief, diet: "egg-friendly" }, async () => [
+    item("Chicken Pasta", "chicken", { isVeg: null }),
+    item("Chicken Egg Pasta", "chicken-egg", { isVeg: null }),
+    item("Egg Pasta", "egg", { isVeg: null })
+  ], ["pasta"]);
+  assert.deepEqual(eggFriendly.results.map(value => value.title), ["Egg Pasta"]);
+  assert.equal(eggFriendly.results[0].diet, "non-vegetarian");
 });
 
 test("public results are labeled as leads with no fabricated price or availability", async () => {
@@ -125,6 +217,19 @@ test("live shortlist shows up to 15 items across restaurants", async () => {
   assert.equal(new Set(result.results.map(value => value.id.split(":")[0])).size, 5);
 });
 
+test("local shortlist spreads early cards across dish families", () => {
+  const items = [
+    ...Array.from({ length: 12 }, (_, index) => item(`Paneer Tikka ${index}`, `paneer-${index}`, { restaurantId: `paneer-r${index}` })),
+    ...Array.from({ length: 4 }, (_, index) => item(`Chole ${index}`, `chole-${index}`, { restaurantId: `chole-r${index}` })),
+    ...Array.from({ length: 4 }, (_, index) => item(`Dal Tadka ${index}`, `dal-${index}`, { restaurantId: `dal-r${index}` }))
+  ];
+  const result = rankLiveItems(items, brief, ["paneer tikka", "chole", "dal tadka"]);
+  assert.equal(result.length, 15);
+  assert.ok(result.slice(0, 9).some(value => value.title.startsWith("Chole")));
+  assert.ok(result.slice(0, 9).some(value => value.title.startsWith("Dal")));
+  assert.ok(result.slice(0, 9).some(value => value.title.startsWith("Paneer")));
+});
+
 test("a broad dish estimate can lower a nutrition-unlikely item without claiming a verified match", async () => {
   const result = await searchWithSwiggy({ ...brief, minProteinG: 40, maxCaloriesKcal: 200 }, async () => [
     item("Paneer Tikka", "p1"), item("Unknown Special", "u1")
@@ -144,7 +249,9 @@ test("Gemma expansion accepts only a new permitted dish matching the brief", () 
   assert.deepEqual(filterAdditionalIdeas(brief, ["paneer tikka"], ["Indian food delivery", "rajma", "chicken tikka"]), ["rajma"]);
   assert.deepEqual(filterAdditionalIdeas({ ...brief, dish: "dosa" }, ["dosa"], ["rajma"]), []);
   assert.deepEqual(filterAdditionalIdeas({ ...brief, goal: "lighter", wish: "no tofu" }, ["salad"], ["tofu bowl", "sprouts chaat"]), ["sprouts chaat"]);
-  assert.deepEqual(filterAdditionalIdeas({ ...brief, cuisine: "Gujarati" }, ["paneer tikka"], ["rajma"]), ["rajma"]);
+  assert.deepEqual(filterAdditionalIdeas({ ...brief, cuisine: "Gujarati" }, ["paneer tikka"], ["rajma", "dhokla"]), ["dhokla"]);
+  assert.deepEqual(filterAdditionalIdeas({ ...brief, cuisine: "Chinese" }, ["veg noodles"], ["rajma", "veg fried rice"]), ["veg fried rice"]);
+  assert.deepEqual(filterAdditionalIdeas({ ...brief, cuisine: "Italian" }, ["pasta"], ["rajma", "ravioli", "risotto"]), ["ravioli", "risotto"]);
 });
 
 test("Gemma expansion falls back to safe themes when the model is unavailable", async () => {

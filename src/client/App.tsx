@@ -7,7 +7,7 @@ type SystemStatus = {
   swiggy: string;
   swiggyLocalEnabled: boolean;
   webSearch: string;
-  demoSearchRemaining: number;
+  demoSearchRemaining: number | null;
 };
 
 type Address = { id: string; label: string };
@@ -111,7 +111,7 @@ function MenuCard({ item }: { item: MealResult }) {
       <span className="menu-card-image-tag">{item.source === "swiggy-live" ? "LIVE MENU ITEM" : "WEB SEARCH LEAD"}</span>
     </div>
     <div className="menu-card-body">
-      <div className="menu-card-top"><span>{item.diet === "unknown" ? "DIET UNCONFIRMED" : item.diet.toUpperCase()}</span><span>{item.availability === "available" ? "AVAILABLE" : "STOCK UNCONFIRMED"}</span></div>
+      <div className="menu-card-top"><span>{item.diet === "unknown" ? "DIET UNCONFIRMED" : item.diet === "non-vegetarian" ? "NON-VEG" : "VEG"}</span><span>{item.availability === "available" ? "AVAILABLE" : "STOCK UNCONFIRMED"}</span></div>
       <h3>{item.title}</h3>
       <p className="restaurant-name">{item.source === "web-lead" ? "Source: " : ""}{item.restaurant}</p>
       {item.searchTheme && <p className="search-theme">Found while searching for {item.searchTheme}</p>}
@@ -273,7 +273,7 @@ export function App() {
               <label className="field live-query"><span>Dish, if you have one in mind <span className="optional-tag">OPTIONAL</span></span><input type="text" maxLength={80} value={brief.dish} onChange={e => set("dish", e.target.value)} placeholder="e.g. paneer tikka · leave blank to explore" /><FieldHint>Leave this empty and we’ll search several ideas for your goal.</FieldHint></label>
               <label className="check-row"><input type="checkbox" checked={brief.strictNutrition} onChange={e => set("strictNutrition", e.target.checked)} /><span>Only call it an exact match when nutrition is documented</span></label>
               <label className="check-row"><input type="checkbox" checked={brief.preferWellReviewed} onChange={e => set("preferWellReviewed", e.target.checked)} /><span>Prefer well-reviewed restaurants when ratings are available</span></label>
-              <div className="form-footer"><p>Prices and nutrition are labeled by what we can verify. {system && `${system.demoSearchRemaining} of 5 demo searches remain in this browser session.`}</p><button className="button button-light" disabled={busy || system?.demoSearchRemaining === 0} type="submit">{busy ? "Searching…" : system?.demoSearchRemaining === 0 ? "Demo search limit reached" : "Find food that fits"} <ArrowIcon /></button></div>
+              <div className="form-footer"><p>Prices and nutrition are labeled by what we can verify. {system && (system.demoSearchRemaining === null ? "Connected local Swiggy searches have no demo limit." : `${system.demoSearchRemaining} of 5 demo searches remain in this browser session.`)}</p><button className="button button-light" disabled={busy || system?.demoSearchRemaining === 0} type="submit">{busy ? "Searching…" : system?.demoSearchRemaining === 0 ? "Demo search limit reached" : "Find food that fits"} <ArrowIcon /></button></div>
               {formMessage && <p className="form-message" role="status">{formMessage}</p>}
             </form>
           </div>
@@ -289,7 +289,7 @@ export function App() {
           {resultMessage && <p className={`result-message ${searchStatus === "error" ? "result-message-error" : ""}`} role="status">{resultMessage}</p>}
 
           {isLoading && <div className="results-grid" aria-label="Loading menu results"><div className="skeleton-card" /><div className="skeleton-card" /><div className="skeleton-card" /></div>}
-          {searchStatus === "done" && searchResult && <><div className="live-results-label"><span className="live-dot" /> {searchResult.results.length} {searchResult.source === "swiggy-live" ? "RANKED LIVE MENU ITEMS" : "PUBLIC WEB LEADS"}<span>{searchResult.source === "swiggy-live" ? "Menu price only · broad dish estimates where available" : "Check each source"} · nutrition not menu-verified</span></div>{searchResult.warnings.map(warning => <p className="result-message" key={warning}>{warning}</p>)}<div className="query-list">Searched: {searchResult.queries.join(" · ")}</div><div className="results-grid">{searchResult.results.map(item => <MenuCard key={item.id} item={item} />)}</div>{searchResult.source === "swiggy-live" && system?.gemma === "configured" && <div className="gemma-more"><button type="button" onClick={exploreWithGemma} disabled={moreBusy || system.demoSearchRemaining === 0}>{moreBusy ? "Checking more dish ideas…" : "Explore more dishes with Gemma ↗"}</button><small>Tries up to three new dish themes. Uses one of your five demo searches only when there are new themes to try.</small>{moreMessage && <p role="status">{moreMessage}</p>}</div>}</>}
+          {searchStatus === "done" && searchResult && <><div className="live-results-label"><span className="live-dot" /> {searchResult.results.length} {searchResult.source === "swiggy-live" ? "RANKED LIVE MENU ITEMS" : "PUBLIC WEB LEADS"}<span>{searchResult.source === "swiggy-live" ? "Menu price only · broad dish estimates where available" : "Check each source"} · nutrition not menu-verified</span></div>{searchResult.warnings.map(warning => <p className="result-message" key={warning}>{warning}</p>)}<div className="query-list">Searched: {searchResult.queries.join(" · ")}</div><div className="results-grid">{searchResult.results.map(item => <MenuCard key={item.id} item={item} />)}</div>{searchResult.source === "swiggy-live" && system?.gemma === "configured" && <div className="gemma-more"><button type="button" onClick={exploreWithGemma} disabled={moreBusy}>{moreBusy ? "Checking more dish ideas…" : "Explore more dishes with Gemma ↗"}</button><small>Tries up to three new dish themes without using SerpApi or your demo search allowance.</small>{moreMessage && <p role="status">{moreMessage}</p>}</div>}</>}
           {searchStatus === "done" && searchResult?.results.length === 0 && <div className="results-empty"><span className="empty-symbol" aria-hidden="true">✳</span><h3>No useful leads this time.</h3><p>Try a different dish, cuisine, or city. We won’t label a result a match without evidence.</p><a className="text-link" href="#meal-brief">Edit your brief <ArrowIcon /></a></div>}
           {(searchStatus === "idle" || searchStatus === "error") && <div className="results-empty"><span className="empty-symbol" aria-hidden="true">✳</span><h3>{searchStatus === "idle" ? "Your next good find starts above." : "We couldn’t complete that search."}</h3><p>{searchStatus === "idle" ? "Set a goal and budget. A dish is optional; we’ll explore ideas if you leave it blank." : "Your choices are saved in the form. Check the message above and try again."}</p><a className="text-link" href="#meal-brief">{searchStatus === "idle" ? "Build my meal" : "Back to my brief"} <ArrowIcon /></a></div>}
           <div className="results-footnote"><span aria-hidden="true">✳</span><p>CraveCode never places an order for you. A menu price is not the final total, and an unknown macro is never called a match. Ratings reflect customer feedback, not a food-safety inspection.</p></div>

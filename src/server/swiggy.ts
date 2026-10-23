@@ -60,7 +60,14 @@ function finiteNumber(value: unknown): number | null {
 }
 
 function boolean(value: unknown): boolean | null {
-  return typeof value === "boolean" ? value : null;
+  if (typeof value === "boolean") return value;
+  if (value === 1 || value === 0) return value === 1;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["true", "1", "veg", "vegetarian"].includes(normalized)) return true;
+    if (["false", "0", "non-veg", "non veg", "nonveg", "non-vegetarian"].includes(normalized)) return false;
+  }
+  return null;
 }
 
 class BrowserOAuthProvider implements OAuthClientProvider {
@@ -290,12 +297,14 @@ export async function searchMenu(session: SwiggySession, addressId: string, quer
     if (!menuItemId || !restaurantId || !name) return [];
     const item: PreviewMenuItem = {
       name,
+      description: string(record?.description) || string(record?.itemDescription),
+      category: string(record?.category) || string(record?.categoryName),
       menuItemId,
       restaurantId,
       restaurantName: string(record?.restaurant_name) || "Restaurant",
       priceInr: finiteNumber(record?.price),
       imageUrl: string(record?.imageUrl),
-      isVeg: boolean(record?.isVeg),
+      isVeg: boolean(record?.isVeg ?? record?.is_veg),
       inStock: typeof record?.inStock === "number" ? record.inStock > 0 : boolean(record?.inStock),
       hasCustomizations: Boolean(record?.hasVariants || record?.hasAddons || record?.variations || record?.variantsV2)
     };
@@ -322,7 +331,8 @@ export async function searchRestaurants(session: SwiggySession, addressId: strin
       availabilityStatus: status === "OPEN" || status === "CLOSED" || status === "UNAVAILABLE" ? status : null,
       areaName: string(record?.areaName),
       distanceKm: finiteNumber(record?.distanceKm),
-      deliveryTimeMinutes: finiteNumber(record?.deliveryTimeMinutes)
+      deliveryTimeMinutes: finiteNumber(record?.deliveryTimeMinutes),
+      ...(Array.isArray(record?.cuisines) ? { cuisines: record.cuisines.filter((value): value is string => typeof value === "string") } : {})
     }];
   });
 }

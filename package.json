@@ -14,7 +14,8 @@
     "test": "node --import tsx --test src/**/*.test.ts",
     "check": "tsc --noEmit",
     "gemma:probe": "tsx src/server/gemma-probe.ts",
-    "gemma:evaluate": "tsx src/server/gemma-evaluate.ts"
+    "gemma:evaluate": "tsx src/server/gemma-evaluate.ts",
+    "search:evaluate": "tsx src/server/search-evaluate.ts"
   },
   "dependencies": {
     "@mastra/core": "^1.79.0",

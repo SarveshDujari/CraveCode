@@ -2,8 +2,9 @@ import { createStep, createWorkflow } from "@mastra/core/workflows";
 import * as Sentry from "@sentry/node";
 import { z } from "zod";
 import { mealBriefSchema, mealSearchResponseSchema, type MealBrief, type MealSearchResponse, type PreviewMenuItem, type RestaurantSignal } from "../shared/contracts.ts";
-import { searchWithSwiggy, searchWithWeb, serpApiSearch } from "./meal-search.ts";
+import { searchWithSwiggyAdaptive, searchWithWeb, serpApiSearch } from "./meal-search.ts";
 import { suggestQueries } from "./gemma-planner.ts";
+import { planLocalCandidates } from "./local-catalog.ts";
 
 type SearchMode =
   | { source: "swiggy"; searchMenu: (query: string, vegOnly: boolean) => Promise<PreviewMenuItem[]>; searchRestaurants?: (query: string) => Promise<RestaurantSignal[]> }
@@ -13,20 +14,20 @@ type SearchMode =
 // calls the authorized source, then the evaluator enforces evidence labels.
 export async function runMealWorkflow(brief: MealBrief, mode: SearchMode): Promise<MealSearchResponse> {
   const inputSchema = z.object({ brief: mealBriefSchema });
-  const plannedSchema = z.object({ brief: mealBriefSchema, queries: z.array(z.string()).max(4) });
+  const plannedSchema = z.object({ brief: mealBriefSchema, queries: z.array(z.string()).max(12) });
   const resultSchema = z.object({ result: mealSearchResponseSchema });
 
   const plan = createStep({
     id: "plan-bounded-queries", inputSchema, outputSchema: plannedSchema,
     execute: async ({ inputData }) => Sentry.startSpan({ name: "meal.plan", op: "meal.plan" }, async () => ({
-      brief: inputData.brief, queries: await suggestQueries(inputData.brief)
+      brief: inputData.brief, queries: mode.source === "swiggy" ? planLocalCandidates(inputData.brief) : await suggestQueries(inputData.brief)
     }))
   });
   const discover = createStep({
     id: "discover-food", inputSchema: plannedSchema, outputSchema: resultSchema,
     execute: async ({ inputData }) => Sentry.startSpan({ name: mode.source === "swiggy" ? "meal.search.swiggy" : "meal.search.web", op: "meal.search" }, async () => ({
       result: mode.source === "swiggy"
-        ? await searchWithSwiggy(inputData.brief, mode.searchMenu, inputData.queries, mode.searchRestaurants)
+        ? await searchWithSwiggyAdaptive(inputData.brief, mode.searchMenu, inputData.queries, mode.searchRestaurants)
         : await searchWithWeb(inputData.brief, mode.searchWeb || serpApiSearch, inputData.queries)
     }))
   });

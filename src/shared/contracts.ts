@@ -74,6 +74,8 @@ export type CartAudit = z.infer<typeof cartAuditSchema>;
 
 export type PreviewMenuItem = {
   name: string;
+  description?: string | null;
+  category?: string | null;
   menuItemId: string;
   restaurantId: string;
   restaurantName: string;
@@ -92,6 +94,7 @@ export type RestaurantSignal = {
   areaName?: string | null;
   distanceKm?: number | null;
   deliveryTimeMinutes?: number | null;
+  cuisines?: string[];
 };
 
 export const restaurantReviewSchema = z.object({

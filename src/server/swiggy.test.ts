@@ -67,6 +67,27 @@ test("menu search loads one extra page and keeps items from earlier queries", as
   assert.ok(session.menuItems.has("chole-1"));
 });
 
+test("menu search normalizes numeric and string diet flags", async () => {
+  const session = createSwiggySession("http://localhost/callback");
+  session.addressIds.add("a1");
+  session.client = fakeClient(() => ({ items: [
+    { ...dish, menu_item_id: "chicken-1", name: "Chicken Pasta", isVeg: 0 },
+    { ...dish, menu_item_id: "pizza-1", name: "Veg Pizza", isVeg: "true" },
+    { ...dish, menu_item_id: "fish-1", name: "Fish Curry", isVeg: undefined, is_veg: "false" }
+  ] }));
+  const result = await searchMenu(session, "a1", "pasta", false);
+  assert.deepEqual(result.map(item => item.isVeg), [false, true, false]);
+});
+
+test("menu search retains optional description and category evidence", async () => {
+  const session = createSwiggySession("http://localhost/callback");
+  session.addressIds.add("a1");
+  session.client = fakeClient(() => ({ items: [{ ...dish, name: "Creamy White Sauce", description: "Penne pasta with herbs", categoryName: "Pasta" }] }));
+  const [result] = await searchMenu(session, "a1", "pasta", false);
+  assert.equal(result.description, "Penne pasta with herbs");
+  assert.equal(result.category, "Pasta");
+});
+
 test("cart probe refuses an item that gains required customization on scoped recheck", async () => {
   const calls: string[] = [];
   const session = createSwiggySession("http://localhost/callback");

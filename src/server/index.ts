@@ -140,15 +140,16 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
   }
   if (method === "GET" && pathname === "/api/system") {
     const session = getSwiggySession(cookie(request, "mealpilot_session"));
-    const demo = await getDemoSession(cookie(request, "cravecode_demo"));
-    if (demo.isNew) response.setHeader("Set-Cookie", demoCookie(demo.id));
+    const localSwiggyConnected = swiggyLocalEnabled && Boolean(session?.client);
+    const demo = localSwiggyConnected ? null : await getDemoSession(cookie(request, "cravecode_demo"));
+    if (demo?.isNew) response.setHeader("Set-Cookie", demoCookie(demo.id));
     json(response, 200, {
       mongo: getDatabase() ? "connected" : "not-configured",
       gemma: swiggyLocalEnabled && process.env.GEMMA_API_URL && process.env.GEMMA_MODEL ? "configured" : "not-configured",
       swiggy: session?.client ? "connected" : "not-connected",
       swiggyLocalEnabled,
       webSearch: process.env.SERPAPI_API_KEY ? "configured" : "not-configured",
-      demoSearchRemaining: demo.remaining
+      demoSearchRemaining: demo?.remaining ?? null
     });
     return;
   }
@@ -180,9 +181,6 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
       if (!brief.city.trim()) { json(response, 400, { error: swiggyLocalEnabled ? "Connect Swiggy and choose an address to search live menus." : "Enter your city for public web discovery." }); return; }
       if (!process.env.SERPAPI_API_KEY) { json(response, 503, { error: "Public web search is being connected. Please check back shortly." }); return; }
     }
-    const demo = await getDemoSession(cookie(request, "cravecode_demo"));
-    if (demo.isNew) response.setHeader("Set-Cookie", demoCookie(demo.id));
-    await takeDemoSearch(demo.id);
     if (swiggyLocalEnabled && session?.client && brief.addressId) {
       result = await Sentry.startSpan({ name: "meal.search.request", op: "meal.search" }, () => runMealWorkflow(brief, {
         source: "swiggy",
@@ -190,6 +188,9 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
         searchRestaurants: query => searchRestaurants(session, brief.addressId!, query)
       }));
     } else {
+      const demo = await getDemoSession(cookie(request, "cravecode_demo"));
+      if (demo.isNew) response.setHeader("Set-Cookie", demoCookie(demo.id));
+      await takeDemoSearch(demo.id);
       result = await Sentry.startSpan({ name: "meal.search.request", op: "meal.search" }, () => runMealWorkflow(brief, { source: "web" }));
     }
     if (getDatabase()) {
@@ -240,9 +241,6 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
     if (!addressId) { json(response, 400, { error: "Choose a saved delivery address first." }); return; }
     const additional = await suggestAdditionalQueries(search.brief, search.queries);
     if (!additional.queries.length) { json(response, 200, { queries: [], results: [], message: "No new dish themes fit this brief. Try clearing the optional dish or cuisine to explore more." }); return; }
-    const demo = await getDemoSession(cookie(request, "cravecode_demo"));
-    if (demo.isNew) response.setHeader("Set-Cookie", demoCookie(demo.id));
-    await takeDemoSearch(demo.id);
     const explored = await searchWithSwiggy(search.brief,
       (query, vegOnly) => searchMenu(session, addressId, query, vegOnly), additional.queries,
       query => searchRestaurants(session, addressId, query));

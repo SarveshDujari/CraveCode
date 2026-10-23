@@ -1,18 +1,102 @@
 # CraveCode
 
-CraveCode is a meal-discovery agent in progress. Give it a budget, diet, protein and calorie targets, and optional food preferences. The Phase 2 engine searches several goal-aware dish themes, ranks live Swiggy menu items locally, and explains what is and is not verified. It never places an order automatically.
+**Food discovery against your goals, with evidence about what is still unknown.** Enter a meal, diet, protein minimum, calorie ceiling, budget, and optional cuisine or dish. The signed-in local demo searches live Swiggy menus near a saved delivery address and returns up to 15 varied choices. The [public Render preview](https://cravecode.onrender.com/) explores city-specific food pages; it cannot yet sign in to Swiggy or verify those pages as live menu items.
 
-The project is being built in [four phases](./FOUR_PHASE_ROADMAP.md). The [architecture](./ARCHITECTURE.md) and [frontend design](./FRONTEND_DESIGN.md) set the constraints for later work. **Phase 2's search workflow runs locally and on Render. Public search has a configured SerpApi key; public Swiggy OAuth still needs production approval. Nutrition-source matching and cart preparation remain open.**
+CraveCode is a Hacktoberfest Week 3 project in **Phase 2: discovery and explanation**. Search and ranking work. Exact restaurant nutrition, final delivery total, and cart read-back do not. The app does not place an order.
 
-The implemented frontend has a white hero with eight floating food illustrations, a black meal-brief section, and a white results area. A dish is optional. A signed-in local Swiggy search returns ranked live menu cards. The hosted site uses SerpApi for clearly labeled public web leads by city once configured; these are not verified deliverable menu items.
+![CraveCode white opening scene with floating food illustrations](./docs/cravecode-hero.png)
 
-![CraveCode desktop hero](./docs/cravecode-hero.png)
+[Mobile view](./docs/cravecode-mobile.png) · [Meal brief](./docs/cravecode-brief.png) · [Four-phase roadmap](./FOUR_PHASE_ROADMAP.md)
 
-[Mobile hero](./docs/cravecode-mobile.png) · [Dark meal brief](./docs/cravecode-brief.png)
+## Two honest demo modes
+
+| | Signed-in local demo | Public Render preview |
+| --- | --- | --- |
+| Open | `http://localhost:8787` after setup | [cravecode.onrender.com](https://cravecode.onrender.com/) |
+| Discovery | Swiggy MCP menu searches for a selected saved address | One SerpApi Google query for Swiggy city pages per uncached search |
+| Result | Up to 15 ranked **live menu items** | Up to 15 filtered **web leads**; open the source page to investigate |
+| Evidence | Menu price, stock/diet flags, limited restaurant rating context when provided | No verified menu price, stock, diet, delivery, review, or nutrition |
+| Nutrition | Broad dish-level guesses for supported names; otherwise unknown | Unknown |
+| Extra ideas | Optional local Gemma action | Unavailable |
+| Limit | No five-search demo cap on connected Swiggy searches | Five search submissions per browser session, plus shared SerpApi guards |
+
+The hosted preview is useful for viewing the product and exploring leads. It is **not** a live Swiggy-menu mirror of the local demo. A good rating is customer feedback, not a food-safety certification. Menu price is not the all-in price: taxes, fees, discounts, and the final payable amount need cart verification.
+
+## The experience
+
+The page moves from a white hero with eight supplied food illustrations, through a dark meal-brief form, to a white results area. Motion is decorative; the form and results remain usable with reduced motion. A dish name is optional: leaving it blank lets the planner explore several food families. The form also supports diet, meal slot, goal, protein, calories, total budget, cuisine, exclusions, and a better-reviewed restaurant preference. Cards distinguish live menu evidence from public web leads and show cautions alongside suggestions.
+
+<!-- Add current results and mobile screenshots here before submission. Caption local Swiggy items and Render web leads separately. -->
+
+## Architecture
+
+```mermaid
+flowchart LR
+    UI[React + Vite browser UI] -->|validated meal brief| API[Node / TypeScript API]
+    API --> WF[Mastra: plan → discover → verify]
+    WF --> SRC{Discovery mode}
+    SRC -->|signed-in localhost| SW[Swiggy MCP menu + restaurant search]
+    SRC -->|public or fallback| SE[SerpApi city-page search]
+    SW --> R[Normalize → filter → score → diversify]
+    SE --> R
+    R --> UI
+    API --> DB[(MongoDB Atlas jobs + candidates + budgets)]
+    API -. optional stage spans .-> ST[Sentry]
+    UI -->|explicit Explore more action| G[Local Gemma allowlisted dish ideas]
+    G --> SW
+```
+
+The browser never receives server credentials for Swiggy, SerpApi, Atlas, or Gemma. The API validates input with Zod, then runs Mastra's **plan → discover → verify-evidence-labels** workflow. Swiggy and SerpApi are separate modes under one versioned result contract with explicit source labels. Atlas saves completed jobs and candidates when configured and holds demo/SerpApi budget counters. A failed optional result write adds a warning; on Render, an unavailable Atlas budget store stops paid SerpApi requests. Sentry stage spans run only with `SENTRY_DSN` and omit credentials, address IDs, and request text.
+
+```mermaid
+sequenceDiagram
+    participant Visitor
+    participant API as CraveCode API
+    participant Workflow as Mastra workflow
+    participant Swiggy as Swiggy MCP
+    Visitor->>API: Brief + selected address
+    API->>Workflow: Validated brief
+    Workflow->>Workflow: Catalogue candidates (max 12)
+    par Initial discovery
+        Workflow->>Swiggy: Menu query 1
+        Workflow->>Swiggy: Menu query 2
+    end
+    Swiggy-->>Workflow: Menu items and optional next pages
+    Workflow->>Workflow: Check eligible count and dish-family variety
+    opt Fewer than 12 eligible cards or 3 families
+        Workflow->>Swiggy: Up to 2 more distinct menu queries
+        Swiggy-->>Workflow: More items
+    end
+    Workflow->>Swiggy: Up to 2 restaurant-info queries
+    Swiggy-->>Workflow: Rating, count, area when available
+    Workflow->>Workflow: Filter, score, diversify, label evidence
+    Workflow-->>API: Up to 15 cards + warnings
+    API-->>Visitor: Ranked choices and caveats
+```
+
+The restaurant lookup starts after the first menu batch and can overlap the extra menu batch. Each menu query may read one additional Swiggy page. Source deadlines prevent one slow query from holding the whole response; successful queries can still return useful cards.
+
+## Local search algorithm
+
+1. **Plan food families.** [`local-catalog.ts`](./src/server/local-catalog.ts) maps aliases to North Indian, South Indian, Italian, Chinese, Mexican, Thai, Gujarati, and general dish families. Goal, protein target, calorie ceiling, meal slot, diet, and cuisine determine candidate order. An explicit dish goes first and expands only through known aliases. An unfamiliar cuisine is searched directly and must appear in menu text.
+2. **Search adaptively, within a bound.** Two terms run together. If fewer than 12 eligible cards or three dish families appear, the engine tries up to two more, preferring unseen families. Four menu queries is the initial-search maximum. That limits provider work **per search**; it is not the five-search public demo limit.
+3. **Normalize evidence.** Keep stable item and restaurant IDs, menu price, stock/diet flags, and optional description/category. Obvious meat or egg names can provide a cautious non-vegetarian label when the provider flag is absent. Diet filters reject uncertain items where a requirement cannot be established.
+4. **Apply hard filters.** Remove known out-of-stock or closed items, incompatible diet, named exclusions, unrelated explicit-dish/cuisine matches, and menu prices already above budget. Unknown price stays visible with a caution; a menu price below budget never proves the **all-in** budget fits.
+5. **Rank and diversify.** Full phrase and recognized family matches beat incidental word matches. The score also considers request terms, stock, known menu price, broad dish estimate, and restaurant feedback. Review count tempers the influence of a high rating with little history. Duplicate names within a restaurant collapse; repetition penalties spread early picks across families, restaurants, and price bands. A second pass fills remaining slots up to 15.
+
+The local nutrition ranges in [`nutrition-estimate.ts`](./src/server/nutrition-estimate.ts) are hand-authored, broad guesses for recognizable dish types, **not** restaurant-specific calories or protein. Unsupported or complex dishes remain unknown. A range overlapping the goal is only *possible*; no item is an exact macro match without a source matching restaurant, item, variant, and portion. See [NUTRITION_METHOD.md](./NUTRITION_METHOD.md).
+
+**Explore more dishes with Gemma** is a separate, explicit action. A small local model chooses up to three new terms from a diet/goal-aware allowlist. Code checks its structured output and falls back to deterministic choices if needed, then searches Swiggy and reports how many genuinely new cards it found. Gemma never supplies nutrition numbers or hard eligibility. The first search works without a model endpoint.
+
+## Public search and credit protection
+
+Render builds up to four rule-based dish themes into **one** city-specific Google query with `OR`, sent through SerpApi. The server keeps HTTPS delivery-page URLs, checks city and term relevance, and removes duplicates and generic pages. The current query targets Swiggy city pages; an allowlist of other delivery hosts is defensive filtering, not proof of additional provider integrations.
+
+Public and local fallback web discovery accept five submissions per browser session (a 24-hour server-side session, stored in Atlas when available). Identical queries can use a one-hour in-memory cache. Separately, server-side guards cap SerpApi calls at **five per UTC day and 100 per UTC month**. Browser cookies are not the hard spend ceiling; the shared guard is. The experimental nutrition-reference endpoint shares that credit guard and cannot verify exact menu nutrition. Connected local Swiggy searches and Gemma follow-ups never invoke SerpApi.
 
 ## Run locally
 
-Requirements: Node.js 24+, npm, and optionally a local Ollama service with the small `gemma3:270m` model pulled.
+Requires **Node.js 24+** and npm. A Swiggy account is needed for live local menus; keep phone and OTP in your own browser. Ollama with `gemma3:270m` is optional for extra ideas. Atlas, SerpApi, and Sentry are optional for a signed-in local search.
 
 ```powershell
 npm ci
@@ -21,60 +105,41 @@ npm run build
 npm start
 ```
 
-Open `http://localhost:8787`. For live frontend changes, run `npm run dev:api` and `npm run dev` in separate terminals, then open `http://localhost:5173`. In that mode set `PUBLIC_ORIGIN=http://localhost:5173` in `.env` for the OAuth callback.
+Open **http://localhost:8787**, connect Swiggy, choose a saved address, and submit the brief. For live UI editing, run `npm run dev:api` and `npm run dev` in separate terminals, open `http://localhost:5173`, and set `PUBLIC_ORIGIN=http://localhost:5173` in `.env`. A cached public OAuth client ID and redirect are kept in ignored `.swiggy-oauth-registration.json`; user access tokens and sessions stay in server memory and are lost on restart.
+
+| Variable | Purpose |
+| --- | --- |
+| `PORT` | API/built-site port; default `8787`. |
+| `PUBLIC_ORIGIN` | Browser origin for redirects and request checks; use the Vite origin in dev mode. |
+| `MONGODB_URI`, `MONGODB_DB` | Optional Atlas connection and database (`mealpilot` by default). |
+| `SERPAPI_API_KEY` | Server-only public/fallback search key. |
+| `GEMMA_API_URL`, `GEMMA_MODEL`, `GEMMA_API_KEY` | Optional Ollama-compatible endpoint/model/auth for extra dish ideas. |
+| `SENTRY_DSN` | Optional server trace destination. |
+
+Never commit `.env`, API keys, Atlas credentials, or account tokens. [`.env.example`](./.env.example) contains placeholders. The [Render blueprint](./render.yaml) defines a free Node service, its build/start commands, and a health check. Configure `SERPAPI_API_KEY` and `MONGODB_URI` in Render Environment, not in Git; allow the service's outbound network access in Atlas. Render derives its public origin from `RENDER_EXTERNAL_URL`. Its service can take time to wake after inactivity.
+
+## Verify and measure
 
 ```powershell
 npm run check
 npm test
-npm run gemma:probe
-npm run gemma:evaluate
+npm run build
+npm run search:evaluate
 ```
 
-The Gemma probe uses the Ollama generate API by default. Set `GEMMA_API_URL` and `GEMMA_MODEL` to another compatible endpoint/model if needed. `gemma:evaluate` compares up to three constrained extra dish themes against the deterministic planner on a five-brief offline menu-name fixture; it is a proxy, not proof of live Swiggy coverage. The first search stays deterministic. A signed-in local visitor can request more dish ideas after seeing initial results; the UI reports the themes tried and how many genuinely new Swiggy menu items they found. If the model fails to return a usable suggestion, a diet- and goal-checked fallback supplies the extra themes and is labeled as such.
+`search:evaluate` compares the previous four-term search with the adaptive algorithm on three **synthetic** meal/menu fixtures: vegetarian protein, Italian, and Chinese. It reports relevant items retrieved, precision among the first five cards, dish families among the first 15, and menu-query count; it fails on relevance, variety, or the four-query bound. These fixtures are regression checks, **not live Swiggy accuracy measurements**. `npm run gemma:probe` and `npm run gemma:evaluate` require the model endpoint; the latter is an offline name-match proxy, not proof of live yield. Real evaluation needs reviewed, anonymized searches across addresses and cuisines, with no-match and latency cases.
 
-## Phase 2 search
+Useful read-only checks: `GET /api/health` confirms the build; `GET /api/system` reports integration state and public-search allowance without exposing keys. `POST /api/meal-search` returns a versioned result. Other endpoints support brief validation, local OAuth/address flow, optional Gemma expansion, and an experimental cart probe. The probe is **not** in the user-facing flow because reliable write and read-back have not been demonstrated.
 
-The `/api/meal-search` endpoint validates the brief, runs a Mastra workflow (bounded query planning → discovery → evidence checks), and returns a versioned job result. Local authenticated Swiggy calls cover up to four dish themes and one additional menu page per theme when available, with deduplication, source timeouts, stock/diet filtering, and provisional ranking. The initial shortlist shows up to 15 items and spreads its first picks across restaurants when possible. A review preference uses both Swiggy rating and review count; area, distance, and delivery time are shown when returned. Low ratings, limited history, or unavailable data are labeled. Ratings are customer feedback, not food-safety certification. Public Render calls use one SerpApi Google search per click for the chosen city and link to source pages. Web leads have no claimed price, diet, stock, restaurant rating, nutrition, or deliverability. All-in budget and macro targets cannot be called exact matches without verified data. Search jobs/candidates are saved to Atlas when connected; a database write failure returns the results with a warning.
+## Next proofs
 
-Sentry spans are enabled only when `SENTRY_DSN` is configured. Spans use stage names without address IDs, credentials, dish text, or full request bodies. Local Gemma is limited to choosing up to three extra dishes from a diet/goal-aware allowlist on explicit user action. It cannot replace the initial search, invent macros, or run on Render. The local shortlist may show broad, illustrative dish nutrition ranges from the [documented approximation method](./NUTRITION_METHOD.md). These are not measured restaurant servings and never qualify as an exact match. Exact restaurant-item nutrition matching remains open. The older on-demand generic nutrition API remains available for experiments but is not exposed in the UI and shares the strict SerpApi credit cap.
+| Priority | Work | Why |
+| --- | --- | --- |
+| Search quality | Evaluate live, anonymized Swiggy searches by cuisine, address, diet, relevance, variety, and latency; tune from observed misses. | Synthetic fixtures cannot show actual coverage. |
+| Nutrition | Match restaurant-published data to exact restaurant, menu item, variant, and serving; record provenance and coverage/error. | Generic ranges cannot justify an exact macro claim. |
+| Restaurant confidence | Add attributable recent review context where access permits. | Aggregate rating has limited context and is no safety guarantee. |
+| Public Swiggy | Obtain Swiggy Builders production access, register HTTPS callback, and add durable encrypted per-user sessions. | Render cannot offer live account/address search yet. |
+| Cart | Diagnose the failed probe, require explicit consent, recheck item/variant, then verify cart contents and final payable after write. | No cart success or final budget fit can be claimed today. |
+| Hackathon proof | Capture current screenshots/video, a real Sentry trace if configured, live evaluation, and a clear DEV write-up. | Judges should distinguish working integrations from plans. |
 
-## Swiggy integration
-
-Connecting Swiggy locally starts its documented OAuth 2.1/PKCE browser flow, which requires the account holder's phone/OTP. After connection, choose a saved address and search. The dish field is optional; the engine otherwise explores several candidates suggested by the goal and diet. The API returns only a small menu summary: name, restaurant, menu price, stock, and IDs. It does not claim the item meets macro or final-budget goals.
-
-The experimental cart-probe endpoint asks for explicit confirmation, rechecks the item within its restaurant, refuses to overwrite a nonempty cart, and requires a read-back before claiming success. The account holder reports that the first cart test did not work, so the visible cart button is hidden while we build the search engine. We will diagnose the exact failure in Phase 3. No checkout or order tool is exposed. The local SDK can expose the current `update_food_cart` input schema at `/api/swiggy/cart-tool-schema` for debugging because Swiggy's recipe and reference examples use different cart payload shapes.
-
-Swiggy OAuth is deliberately limited to localhost. Sessions and tokens are held in server memory and vanish on restart. Before a public multiuser release, move these into per-user encrypted storage, add proper session management, and complete Swiggy's production-access review. See the [Swiggy developer quickstart](https://mcp.swiggy.com/builders/docs/start/developer/) and [authentication guide](https://mcp.swiggy.com/builders/docs/start/authenticate/).
-
-The local app now reuses the public OAuth client ID after a successful Swiggy registration, including across server restarts. It stores only the client ID and matching redirect URI in ignored `.swiggy-oauth-registration.json`; **user access tokens remain in memory**. This avoids registering a new client on every reconnect. If Swiggy rejects the first registration before phone sign-in, the form displays a clear error. That rejection must be resolved by Swiggy's registration service or developer access; the app cannot manufacture a client ID or skip OAuth. Avoid repeated connection attempts during a 429/rate limit and use [Swiggy Builders support](https://mcp.swiggy.com/builders/docs/operate/support/) if the rejection persists.
-
-## Configuration
-
-| Variable | Use |
-| --- | --- |
-| `PORT` | API and production-build port; default `8787`. |
-| `PUBLIC_ORIGIN` | Optional browser origin override. Defaults to Render's `RENDER_EXTERNAL_URL` on Render, or `http://localhost:5173` locally. |
-| `MONGODB_URI` | Optional Atlas connection. If absent, `/api/system` reports `not-configured`. |
-| `MONGODB_DB` | Database name; default `mealpilot`. |
-| `SERPAPI_API_KEY` | Server-side SerpApi key for public city-based web search. Do not put it in the frontend or Git. |
-| `SENTRY_DSN` | Optional server-side tracing destination. |
-| `GEMMA_API_URL` | Ollama-compatible `/api/generate` URL for the probe. |
-| `GEMMA_MODEL` | Local model for optional extra dish exploration; `.env.example` suggests `gemma3:270m`. |
-| `GEMMA_API_KEY` | Optional bearer token for a hosted compatible endpoint. |
-
-The Atlas initializer creates indexes for `meal_jobs`, `candidates`, `nutrition_claims`, `cart_audits`, `preferences`, browser demo sessions, and SerpApi budgets. Search jobs and candidates are persisted when Atlas is configured. Server credentials never enter the browser bundle. The `render.yaml` provides a Singapore-region free web-service blueprint. Add `SERPAPI_API_KEY` and `MONGODB_URI` as Render environment secrets. Allow the service's outbound IP ranges in Atlas Network Access. Render supplies its own public origin. Swiggy OAuth remains disabled on Render until public access and per-user session storage are ready.
-
-Each browser session gets five demo search submissions. Each public click now makes at most one uncached SerpApi search; search responses are cached in memory by query for one hour. A shared, server-side budget reserves at most five SerpApi calls per UTC day and 100 per UTC month across public visitors, including the experimental nutrition API. Render refuses paid calls if Atlas is unavailable, so a server restart cannot bypass the budget. A browser session cookie contains only a random ID, not credentials. This path is for discovery leads, not verified menu prices. Do not commit the API key or Atlas URI.
-
-The live preview is [cravecode.onrender.com](https://cravecode.onrender.com/). The free service can sleep when idle, so allow time for its first request to wake it. Public web search will not return leads until `SERPAPI_API_KEY` is set in Render.
-
-## What is real now
-
-- Responsive three-scene CraveCode frontend with all eight user-supplied illustrations floating around the wordmark, a dark meal form, and a white results area.
-- Accessible single-select diet/goal controls, optional dish, numeric units, validation, reduced-motion support, and an honest disconnected-results state.
-- Typed meal, candidate, evidence, and cart-audit contracts.
-- Node API serving the built frontend, validating briefs, running a Mastra search workflow, and providing local Swiggy OAuth/menu/cart integration paths.
-- Connected Atlas search persistence and budget indexes, plus a local Gemma structured-output probe and extra-dish action.
-- Authenticated local Swiggy address selection and menu search were observed with 10 real item cards before the Phase 2 changes. The owner signed in again and confirmed ranked live cards with the optional dish field empty. Atlas connection and saved search records were confirmed by the owner. The owner saw no safe new dish suggestion in the first Gemma pass, which prompted the bounded multi-theme fallback. After reconnecting, they confirmed the revised Gemma action added new live menu cards. Cart read-back remains unverified. No exact nutrition or all-in price claims.
-
-See [PHASE1_STATUS.md](./PHASE1_STATUS.md) for the checks completed in this workspace and the external gates still open.
+The [roadmap](./FOUR_PHASE_ROADMAP.md) covers all four phases, and [PHASE2_STATUS.md](./PHASE2_STATUS.md) records observed checks. Current code uses Mastra, MongoDB Atlas, Render, optional Gemma and Sentry, and SerpApi; other partner categories are not claimed merely because they appear in the plan. Swiggy is the local delivery integration.
