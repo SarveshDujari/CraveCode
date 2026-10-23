@@ -87,12 +87,10 @@ function OrbitHero() {
       </div>)}
     </div>
     <div className="hero-content">
-      <p className="hero-eyebrow"><span className="eyebrow-line" /> FOOD THAT GETS YOU</p>
       <h1 id="hero-title">Crave<span>Code</span></h1>
       <p className="hero-headline">Find food that fits your cravings, goals, and budget.</p>
       <p className="hero-description">Tell us what you’re after. Explore real menu choices, see what’s known, and decide what belongs in your cart.</p>
       <a className="button button-primary" href="#meal-brief">Find my meal <ArrowIcon down /></a>
-      <span className="hero-caption">EARLY PREVIEW · YOU STAY IN CONTROL</span>
     </div>
     <div className="hero-bottom container" aria-hidden="true"><span>01 / 03</span><span>SCROLL TO EXPLORE <span className="scroll-arrow">↓</span></span></div>
   </section>;
