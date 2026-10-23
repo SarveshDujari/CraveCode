@@ -6,7 +6,7 @@ CraveCode is a Hacktoberfest Week 3 project in **Phase 2: discovery and explanat
 
 ![CraveCode white opening scene with floating food illustrations](./docs/cravecode-hero.png)
 
-[Mobile view](./docs/cravecode-mobile.png) · [Meal brief](./docs/cravecode-brief.png) · [Four-phase roadmap](./FOUR_PHASE_ROADMAP.md)
+[Mobile view](./docs/cravecode-mobile.png) · [Meal brief](./docs/cravecode-brief.png)
 
 ## Two honest demo modes
 
@@ -26,7 +26,11 @@ The hosted preview is useful for viewing the product and exploring leads. It is 
 
 The page moves from a white hero with eight supplied food illustrations, through a dark meal-brief form, to a white results area. Motion is decorative; the form and results remain usable with reduced motion. A dish name is optional: leaving it blank lets the planner explore several food families. The form also supports diet, meal slot, goal, protein, calories, total budget, cuisine, exclusions, and a better-reviewed restaurant preference. Cards distinguish live menu evidence from public web leads and show cautions alongside suggestions.
 
-<!-- Add current results and mobile screenshots here before submission. Caption local Swiggy items and Render web leads separately. -->
+### Local search in action
+
+![Signed-in local Swiggy search showing live menu cards for a vegetarian meal](./docs/local-swiggy-search.png)
+
+This is a real signed-in local menu search captured during development. It predates the latest adaptive ranking update, so the card layout and on-screen wording may differ from the current build. The restaurant items and images came from Swiggy; their nutrition targets were not verified. A fresh screenshot after a current live search can replace it before submission.
 
 ## Architecture
 
@@ -142,4 +146,4 @@ Useful read-only checks: `GET /api/health` confirms the build; `GET /api/system`
 | Cart | Diagnose the failed probe, require explicit consent, recheck item/variant, then verify cart contents and final payable after write. | No cart success or final budget fit can be claimed today. |
 | Hackathon proof | Capture current screenshots/video, a real Sentry trace if configured, live evaluation, and a clear DEV write-up. | Judges should distinguish working integrations from plans. |
 
-The [roadmap](./FOUR_PHASE_ROADMAP.md) covers all four phases, and [PHASE2_STATUS.md](./PHASE2_STATUS.md) records observed checks. Current code uses Mastra, MongoDB Atlas, Render, optional Gemma and Sentry, and SerpApi; other partner categories are not claimed merely because they appear in the plan. Swiggy is the local delivery integration.
+Current code uses Mastra, MongoDB Atlas, Render, optional Gemma and Sentry, and SerpApi; other partner categories are not claimed merely because they appeared in earlier planning. Swiggy is the local delivery integration. The table above tracks the remaining work toward a public live-search release.

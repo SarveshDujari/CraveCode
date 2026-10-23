@@ -259,7 +259,7 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
 
   if (pathname.startsWith("/api/swiggy/")) {
     if (!swiggyLocalEnabled) {
-      json(response, 503, { error: "Swiggy OAuth is enabled only on localhost in this Phase 1 build." });
+      json(response, 503, { error: "Swiggy sign-in is available in the localhost demo only." });
       return;
     }
     if (method === "GET" && pathname === "/api/swiggy/connect") {
