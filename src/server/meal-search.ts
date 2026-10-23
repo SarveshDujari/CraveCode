@@ -200,8 +200,15 @@ export function rankLiveItems(items: PreviewMenuItem[], brief: MealBrief, querie
   const perRestaurant = new Map<string, number>();
   const perFamily = new Map<string, number>();
   const perPriceBand = new Map<string, number>();
-  const fill = (restaurantCap: number, familyCap: number) => {
-    while (selected.length < 15) {
+  const select = (candidate: typeof ranked[number]) => {
+    selected.push(candidate.result);
+    selectedIds.add(candidate.result.id);
+    perRestaurant.set(candidate.restaurantId, (perRestaurant.get(candidate.restaurantId) || 0) + 1);
+    perFamily.set(candidate.family, (perFamily.get(candidate.family) || 0) + 1);
+    perPriceBand.set(candidate.priceBand, (perPriceBand.get(candidate.priceBand) || 0) + 1);
+  };
+  const fill = (restaurantCap: number, familyCap: number, target = 15) => {
+    while (selected.length < target) {
       let best: typeof ranked[number] | null = null;
       let bestValue = -Infinity;
       for (const candidate of ranked) {
@@ -213,13 +220,21 @@ export function rankLiveItems(items: PreviewMenuItem[], brief: MealBrief, querie
         if (value > bestValue) { best = candidate; bestValue = value; }
       }
       if (!best) break;
-      selected.push(best.result);
-      selectedIds.add(best.result.id);
-      perRestaurant.set(best.restaurantId, (perRestaurant.get(best.restaurantId) || 0) + 1);
-      perFamily.set(best.family, (perFamily.get(best.family) || 0) + 1);
-      perPriceBand.set(best.priceBand, (perPriceBand.get(best.priceBand) || 0) + 1);
+      select(best);
     }
   };
+  fill(3, 5, 2);
+  if (brief.diet === "any" && !brief.dish.trim()) {
+    // Keep the best-ranked choices first, then make both eligible diet groups
+    // visible near the top when the provider actually returned both.
+    for (const diet of ["vegetarian", "non-vegetarian"] as const) {
+      while (selected.filter(item => item.diet === diet).length < 2) {
+        const representative = ranked.find(candidate => candidate.result.diet === diet && !selectedIds.has(candidate.result.id));
+        if (!representative) break;
+        select(representative);
+      }
+    }
+  }
   fill(3, 5);
   fill(Infinity, Infinity);
   return selected;
@@ -245,13 +260,18 @@ export async function searchWithSwiggyAdaptive(brief: MealBrief, searchMenu: Sea
   if (brief.cuisine.trim() && !localCuisine(brief.cuisine)) warnings.push("This cuisine is outside the local dish catalogue, so we searched its name directly and kept only menu items that mention it.");
   const preliminary = rankLiveItems(items, brief, queries);
   const familiesSeen = new Set(preliminary.map(item => dishFamily(item.title)?.id || "other"));
+  const missingDiet = brief.diet === "any" && !brief.dish.trim()
+    ? !preliminary.some(item => item.diet === "non-vegetarian") ? "any"
+      : !preliminary.some(item => item.diet === "vegetarian") ? "vegetarian" : null
+    : null;
   const restaurantNames = [...new Set(preliminary.map(item => item.restaurant).filter(value => value !== "Restaurant"))];
   const reviewQueries = searchRestaurants ? [...new Set([queries[0], restaurantNames[0]].filter((value): value is string => Boolean(value)))].slice(0, 2) : [];
   const reviewPromise = searchRestaurants ? Promise.allSettled(reviewQueries.map(query => withDeadline(searchRestaurants(query), 10_000))) : Promise.resolve([]);
-  if (preliminary.length < 12 || familiesSeen.size < 3) {
+  if (preliminary.length < 12 || familiesSeen.size < 3 || missingDiet) {
     const remaining = pool.filter(value => !queries.includes(value));
+    const missingDietQueries = missingDiet ? remaining.filter(value => dishFamily(value)?.diet === missingDiet) : [];
     const notSeen = remaining.filter(value => !familiesSeen.has(queryFamily(value) || "other"));
-    const moreQueries = [...notSeen, ...remaining.filter(value => !notSeen.includes(value))].slice(0, 4 - queries.length);
+    const moreQueries = [...new Set([...missingDietQueries, ...notSeen, ...remaining])].slice(0, 4 - queries.length);
     if (moreQueries.length) {
       const more = await fetchMenuBatch(brief, searchMenu, moreQueries);
       queries.push(...moreQueries);

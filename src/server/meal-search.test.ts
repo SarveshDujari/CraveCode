@@ -71,6 +71,28 @@ test("adaptive local search stops early when two queries yield enough variety", 
   assert.equal(result.results.length, 12);
 });
 
+test("an open diet tries another meat theme when the first two searches return only vegetarian dishes", async () => {
+  const anyDiet = { ...brief, diet: "any" as const, minProteinG: 30, maxCaloriesKcal: 800, budgetInr: 300 };
+  const calls: string[] = [];
+  const result = await searchWithSwiggyAdaptive(anyDiet, async query => {
+    calls.push(query);
+    if (query === "paneer tikka") return Array.from({ length: 15 }, (_, index) => item(
+      index % 3 === 0 ? `Paneer Tikka ${index}` : index % 3 === 1 ? `Paneer Curry ${index}` : `Paneer Salad Bowl ${index}`,
+      `veg-${index}`, { restaurantId: `veg-r${index}` }
+    ));
+    if (query === "grilled chicken") return [
+      item("Grilled Chicken", "meat-1", { restaurantId: "meat-r1", isVeg: false }),
+      item("Grilled Chicken Tikka", "meat-2", { restaurantId: "meat-r2", isVeg: false })
+    ];
+    return [];
+  });
+  assert.deepEqual(calls.slice(0, 2), ["paneer tikka", "chicken tikka"]);
+  assert.ok(calls.includes("grilled chicken"));
+  assert.ok(calls.length <= 4);
+  assert.ok(result.results.some(value => value.diet === "vegetarian"));
+  assert.ok(result.results.some(value => value.diet === "non-vegetarian"));
+});
+
 test("local ranking rejects unrelated dishes, over-budget items, and unrelated explicit dishes", () => {
   const results = rankLiveItems([
     item("Masala Dosa", "dosa"),
@@ -228,6 +250,18 @@ test("local shortlist spreads early cards across dish families", () => {
   assert.ok(result.slice(0, 9).some(value => value.title.startsWith("Chole")));
   assert.ok(result.slice(0, 9).some(value => value.title.startsWith("Dal")));
   assert.ok(result.slice(0, 9).some(value => value.title.startsWith("Paneer")));
+});
+
+test("an open-diet shortlist shows both eligible diet groups near the top", () => {
+  const anyDiet = { ...brief, diet: "any" as const, minProteinG: 30, maxCaloriesKcal: 800, budgetInr: 300 };
+  const items = [
+    ...Array.from({ length: 18 }, (_, index) => item(`Paneer Tikka ${index}`, `veg-${index}`, { restaurantId: `veg-r${index}` })),
+    ...Array.from({ length: 3 }, (_, index) => item(`Chicken Tikka ${index}`, `meat-${index}`, { restaurantId: `meat-r${index}`, isVeg: false }))
+  ];
+  const result = rankLiveItems(items, anyDiet, ["paneer tikka", "chicken tikka"]);
+  assert.equal(result.length, 15);
+  assert.equal(result.slice(0, 4).filter(value => value.diet === "vegetarian").length, 2);
+  assert.equal(result.slice(0, 4).filter(value => value.diet === "non-vegetarian").length, 2);
 });
 
 test("a broad dish estimate can lower a nutrition-unlikely item without claiming a verified match", async () => {

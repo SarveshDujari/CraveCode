@@ -35,3 +35,11 @@ test("tight calorie limits move lighter dish searches ahead of heavier themes", 
   assert.deepEqual(queries.slice(0, 2), ["tofu salad", "sprouts chaat"]);
   assert.ok(queries.indexOf("tofu salad") < queries.indexOf("paneer curry"));
 });
+
+test("an open diet searches vegetarian and meat dishes before filling the query budget", () => {
+  const anyDiet = { ...brief, diet: "any" as const, mealSlot: "dinner" as const, maxCaloriesKcal: 800, budgetInr: 300 };
+  const queries = planLocalCandidates(anyDiet);
+  assert.deepEqual(queries.slice(0, 2), ["paneer tikka", "chicken tikka"]);
+  assert.ok(queries.slice(0, 4).includes("grilled chicken"));
+  assert.deepEqual(planLocalCandidates({ ...anyDiet, dish: "paneer tikka" }).slice(0, 1), ["paneer tikka"]);
+});

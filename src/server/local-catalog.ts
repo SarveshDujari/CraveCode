@@ -124,10 +124,25 @@ export function planLocalCandidates(brief: MealBrief): string[] {
     const variants = family ? [family.query, ...family.aliases, ...(family.alternatives || [])] : [];
     return [...new Set([explicit, ...variants].map(value => value.toLowerCase().trim()).filter(Boolean))].slice(0, 12);
   }
+  // An open diet should actually explore both vegetarian and meat dishes.
+  // Otherwise the catalogue's original order can fill all four search slots
+  // with vegetarian themes before the first chicken query is ever attempted.
+  const ordered = brief.diet === "any" ? (() => {
+    const vegetarian = scored.filter(value => value.family.diet === "vegetarian");
+    const nonVegetarian = scored.filter(value => value.family.diet === "any");
+    if (!vegetarian.length || !nonVegetarian.length) return scored;
+    const alternated: typeof scored = [];
+    for (let index = 0; index < Math.max(vegetarian.length, nonVegetarian.length); index++) {
+      if (vegetarian[index]) alternated.push(vegetarian[index]);
+      if (nonVegetarian[index]) alternated.push(nonVegetarian[index]);
+    }
+    const included = new Set(alternated.map(value => value.family.id));
+    return [...alternated, ...scored.filter(value => !included.has(value.family.id))];
+  })() : scored;
   const queries = [
     ...(desired ? [] : brief.cuisine.trim() ? [brief.cuisine.trim()] : []),
-    ...scored.map(value => value.family.query),
-    ...scored.flatMap(value => value.family.alternatives || [])
+    ...ordered.map(value => value.family.query),
+    ...ordered.flatMap(value => value.family.alternatives || [])
   ];
   return [...new Set(queries.map(value => value.toLowerCase().trim()).filter(Boolean))].slice(0, 12);
 }
